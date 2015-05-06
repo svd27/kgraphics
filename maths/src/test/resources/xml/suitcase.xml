@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<suitcase>
+    <stuff name="one">
+        <contents>
+            <content id="1" storage="2,4,6" fraction="1.0"></content>
+            <content id="2" storage="1,3,5" fraction="3.14"></content>
+        </contents>
+    </stuff>
+    <stuff name="two">
+        <contents>
+            <content id="3" storage="1,2,3,5,7,11" fraction="2.2"></content>
+            <content id="4" storage="13,17,19" fraction="2.2"></content>
+        </contents>
+    </stuff>
+</suitcase>
