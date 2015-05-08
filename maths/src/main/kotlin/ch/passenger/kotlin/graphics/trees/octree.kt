@@ -24,6 +24,10 @@ class Octree<H,V,F>(val extent:AlignedCube, val cellLoad:Int, val collapseLoad:I
         abstract val edges : Iterable<HalfEdge<H,V,F>>
         abstract val faces : Iterable<Face<H,V,F>>
         abstract fun vat(v:VectorF) : Vertex<H,V,F>?
+        abstract fun find(hotzone:AlignedCube) : Result<H,V,F>
+        abstract fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>>
+        abstract fun findVertices(hotzone:AlignedCube) : Iterable<Vertex<H,V,F>>
+        abstract fun findFaces(hotzone:AlignedCube) : Iterable<Face<H,V,F>>
     }
 
     inner class Leaf(extent:AlignedCube) : Node(extent) {
@@ -76,6 +80,11 @@ class Octree<H,V,F>(val extent:AlignedCube, val cellLoad:Int, val collapseLoad:I
         }
 
         override fun vat(v: VectorF): Vertex<H, V, F>? = vertices.firstOrNull { it.v == v }
+
+        override fun find(hotzone: AlignedCube): Result<H, V, F> = Result(findEdges(hotzone), findVertices(hotzone), findFaces(hotzone))
+        override fun findEdges(hotzone: AlignedCube): Iterable<HalfEdge<H, V, F>> = edges.filter { it in hotzone }
+        override fun findVertices(hotzone: AlignedCube): Iterable<Vertex<H, V, F>> = vertices.filter { it.v in hotzone }
+        override fun findFaces(hotzone: AlignedCube): Iterable<Face<H, V, F>> = faces.filter { it in hotzone }
     }
 
     inner class Branch(extent:AlignedCube) : Node(extent) {
@@ -143,7 +152,15 @@ class Octree<H,V,F>(val extent:AlignedCube, val cellLoad:Int, val collapseLoad:I
             vertices.forEach { if(it.v == v) return it }
             return null
         }
+
+        override fun find(hotzone: AlignedCube): Result<H, V, F> = Result(findEdges(extent-hotzone), findVertices(extent-hotzone), findFaces(extent-hotzone))
+
+        override fun findEdges(hotzone: AlignedCube): Iterable<HalfEdge<H, V, F>> = children.filter {  hotzone in it.extent }.flatMap { it.findEdges(it.extent-hotzone) }
+        override fun findVertices(hotzone: AlignedCube): Iterable<Vertex<H, V, F>> = children.filter {  hotzone in it.extent }.flatMap { it.findVertices(it.extent-hotzone) }
+        override fun findFaces(hotzone: AlignedCube): Iterable<Face<H, V, F>> = children.filter {  hotzone in it.extent }.flatMap { it.findFaces(it.extent-hotzone) }
     }
+
+    data class Result<H,V,F>(val edges:Iterable<HalfEdge<H,V,F>> = emptyList(), val vertices:Iterable<Vertex<H,V,F>> = emptyList(), val faces:Iterable<Face<H,V,F>> = emptyList() )
 
     var root : Node = Leaf(extent)
 
@@ -173,4 +190,7 @@ class Octree<H,V,F>(val extent:AlignedCube, val cellLoad:Int, val collapseLoad:I
     }
 
     fun vat(v:VectorF) : Vertex<H,V,F>? = root.vat(v)
+
+    fun find(hotzone:AlignedCube) : Result<H,V,F> = root.find(hotzone)
+    fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = root.findEdges(hotzone)
 }

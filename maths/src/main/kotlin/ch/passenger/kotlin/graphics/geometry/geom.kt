@@ -86,6 +86,9 @@ class AlignedCube(val min: VectorF, val max: VectorF) {
 
     companion object {
         val EMPTY = AlignedCube(VectorF(0, 0, 0), VectorF(0, 0, 0))
+
+        fun around(c:VectorF, displace:Float) : AlignedCube =
+                AlignedCube(c+-displace,c+displace)
     }
 }
 

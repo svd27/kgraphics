@@ -119,4 +119,54 @@ val XMLStreamReader.attributes : Iterable<AttDesc> get() =
     }.toList()
 
 
-fun XMLStreamReader.attribute(local:String) : String = attributes.first { it.n==local }.v
+fun XMLStreamReader.attribute(local:String, default:String="") : String = attributes.firstOrNull { it.n==local }?.v?:default
+
+fun xmlprocess(r:XMLStreamReader, init:XStreamProcessor.()->Unit) {
+    val proc = XStreamProcessor(r)
+    proc.init()
+    proc.read()
+}
+
+class  XStreamProcessor(val r:XMLStreamReader) {
+    val log = LoggerFactory.getLogger(javaClass<XStreamProcessor>())
+    val elementHandlers :MutableMap<String,XStreamProcessor.(r:XMLStreamReader)->Any> = hashMapOf()
+    var chars : XStreamProcessor.(r:XMLStreamReader)->Unit = {}
+
+    fun on(e:String, cb:XStreamProcessor.(r:XMLStreamReader)->Unit) {
+        log.debug("adding eventhandler for $e")
+        elementHandlers[e] = cb
+    }
+
+    fun gobble(n:String, r:XMLStreamReader) {
+        log.warn("skipping ${r.getLocalName()}")
+        while(r.next()!=XMLStreamConstants.END_ELEMENT) {
+            if(r.getEventType()==XMLStreamConstants.START_ELEMENT) {
+                gobble(r.getLocalName(), r)
+            }
+        }
+    }
+
+
+    fun read() : Unit {
+        while(r.next()!=XMLStreamConstants.END_DOCUMENT) {
+            when(r.getEventType()) {
+                XMLStreamConstants.START_ELEMENT -> {
+                    log.info("checking ${r.getLocalName()} -> ${elementHandlers[r.getLocalName()]}")
+                    val cb = elementHandlers[r.getLocalName()]
+                    if(cb!=null) cb(r)
+                }
+                XMLStreamConstants.CHARACTERS -> chars(r)
+                XMLStreamConstants.END_DOCUMENT -> return
+            }
+            if(r.getEventType()==XMLStreamConstants.END_DOCUMENT) return
+        }
+    }
+
+
+
+    fun handler(init:XStreamProcessor.()->Unit)  {
+        val proc = XStreamProcessor(r)
+        proc.init()
+        proc.read()
+    }
+}

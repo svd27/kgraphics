@@ -39,12 +39,12 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
         m[c * rows + r] = v
     }
 
-    fun row(r:Int) : MutableVectorF = MutableVectorF(cols) { assert(r<rows, "r $r"); assert(it<cols, "c $it");this[it,r]}
-    fun row(r:Int, v: MutableVectorF)  = (0..cols-1).forEach { this[it, r] = v[it] }
-    fun col(c:Int) : MutableVectorF = MutableVectorF(rows) {assert(c<cols, "$c col out of bounds $cols"); assert(it<rows, "$it row out $rows"); this[c, it]}
-    fun col(c:Int, v: MutableVectorF)  = (0..rows-1).forEach { this[c, it] = v[it] }
+    fun row(r:Int) : VectorF = VectorF(cols) { assert(r<rows, "r $r"); assert(it<cols, "c $it");this[it,r]}
+    fun row(r:Int, v: VectorF)  = (0..cols-1).forEach { this[it, r] = v[it] }
+    fun col(c:Int) : VectorF = VectorF(rows) {assert(c<cols, "$c col out of bounds $cols"); assert(it<rows, "$it row out $rows"); this[c, it]}
+    fun col(c:Int, v: VectorF)  = (0..rows-1).forEach { this[c, it] = v[it] }
     fun get(c:Int) = col(c)
-    fun set(c:Int, v: MutableVectorF) = col(c, v)
+    fun set(c:Int, v: VectorF) = col(c, v)
 
     constructor(m: MatrixF) : this(m.cols, m.rows, { c, r -> m[c, r] }) {}
     constructor(cols:Int, rows:Int, vararg va:Float) : this(cols, rows, {c,r -> va[c*rows+r]}) {}
@@ -91,18 +91,19 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     m20 m21 m22       v3      v1m20 + v2m21 + v3m22
     ]
      */
-    fun times(v: MutableVectorF) : MutableVectorF {
-        val res  = MutableVectorF(v.dimension) {0f}
-        for(i in 0..v.dimension-1) {
+    fun times(v: VectorF) : VectorF {
+        val t = if(v.dimension==3) v.widen(1f) else v
+        val res  = MutableVectorF(t.dimension) {0f}
+        for(i in 0..t.dimension-1) {
             for(c in 0..cols-1) {
-                res[i] = res[i] + v[c] * this[c,i]
+                res[i] = res[i] + t[c] * this[c,i]
             }
         }
-        return res
+        return res.immutable()
     }
 
 
-    fun invoke(v: MutableVectorF) : MutableVectorF = (this*v)
+    fun invoke(v: VectorF) : VectorF = (this*v)
 
     fun transpose() : MatrixF = MatrixF(rows, cols) {c,r -> this[r,c]}
 
@@ -208,123 +209,74 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     companion object o {
 
 
-        fun scale(v: MutableVectorF) : MatrixF = MatrixF(v.dimension, v.dimension) {r, c -> if(r==c) v[r] else 0f};
+        fun scale(v: VectorF): MatrixF {
+            val sv = if (v.dimension < 4) v.widen(1f) else v
+            return MatrixF(4, 4) { r, c -> if (r == c) sv[r] else 0f }
+        }
 
-        /*
-        emplate <typename T>
-static inline Tmat4<T> rotate(T angle, T x, T y, T z)
-{
-    Tmat4<T> result;
 
-    const T x2 = x * x;
-    const T y2 = y * y;
-    const T z2 = z * z;
-    float rads = float(angle) * 0.0174532925f;
-    const float c = cosf(rads);
-    const float s = sinf(rads);
-    const float omc = 1.0f - c;
-
-    result[0] = Tvec4<T>(T(x2 * omc + c), T(y * x * omc + z * s), T(x * z * omc - y * s), T(0));
-    result[1] = Tvec4<T>(T(x * y * omc - z * s), T(y2 * omc + c), T(y * z * omc + x * s), T(0));
-    result[2] = Tvec4<T>(T(x * z * omc + y * s), T(y * z * omc - x * s), T(z2 * omc + c), T(0));
-    result[3] = Tvec4<T>(T(0), T(0), T(0), T(1));
-
-    return result;
-}
-         */
-
-        fun rotate(theta:Float, axis: MutableVectorF) : MatrixF {
+        fun rotate(theta: Float, axis: VectorF): MatrixF {
             val c = Math.cos(theta.toDouble()).toFloat()
             val s = Math.sin(theta.toDouble()).toFloat()
             val m = MatrixF(4, 4)
-            val a = axis
+            val a = if (axis.dimension < 4) axis.widen(1f) else axis
             val omc = 1 - c
-            val x = a.x; val y = a.y; val z = a.z;
-            val x2 = a.x*a.x; val y2 = a.y*a.y; val z2 = a.z*a.z
+            val x = a.x;
+            val y = a.y;
+            val z = a.z;
+            val x2 = a.x * a.x;
+            val y2 = a.y * a.y;
+            val z2 = a.z * a.z
 
-            /*
-            m[0] = VectorF((x2 * omc + c), (y * x * omc + z * s), (x * z * omc - y * s), (0));
-            m[1] = VectorF((x * y * omc - z * s), (y2 * omc + c), (y * z * omc + x * s), (0));
-            m[2] = VectorF((x * z * omc + y * s), (y * z * omc - x * s), (z2 * omc + c), (0));
-            m[3] = VectorF((0), (0), (0), (1));
-             */
-            m.col(0, MutableVectorF((x2 * omc + c), (y * x * omc + z * s), (x * z * omc - y * s), (0)))
-            m.col(1, MutableVectorF((x * y * omc - z * s), (y2 * omc + c), (y * z * omc + x * s), (0)));
-            m.col(2 , MutableVectorF((x * z * omc + y * s), (y * z * omc - x * s), (z2 * omc + c), (0)))
-            m.col(3, MutableVectorF((0), (0), (0), (1)))
+            m.col(0, VectorF((x2 * omc + c), (y * x * omc + z * s), (x * z * omc - y * s), (0)))
+            m.col(1, VectorF((x * y * omc - z * s), (y2 * omc + c), (y * z * omc + x * s), (0)));
+            m.col(2, VectorF((x * z * omc + y * s), (y * z * omc - x * s), (z2 * omc + c), (0)))
+            m.col(3, VectorF((0), (0), (0), (1)))
 
-            /*
-            m[0,0] = c+ omc *a.x*a.x;     m[0,1] = omc*a.x*a.y + s*a.z; m[0,2] = omc*a.x*a.z - s*a.y; m[0,3] = 0f
-            m[1,0] = omc*a.x*a.y-s*a.z;   m[1,1] = c + omc * a.y*a.y;   m[1,2] = omc*a.y*a.z + s*a.x; m[1,3] = 0f
-            m[2,0] = omc*a.x*a.z + s*a.y; m[2,1] = omc*a.y*a.z - s*a.x; m[2,2] = c+omc*a.z*a.z;       m[2,3] = 0f
-            m[3,0] = 0f; m[3,1] = 0f; m[3,2] = 0f; m[3,3]=1f
-*/
             return m
         }
-        fun translate(v: MutableVectorF) : MatrixF {
-            assert(v.dimension==4)
+
+        fun translate(v: VectorF): MatrixF {
+            assert(v.dimension > 2)
             val m = MatrixF(4, 4)
-            m.col(3, v)
-            m[3,3] = 1f
+            m.col(3, if (v.dimension == 3) v.widen(1f) else v)
+            m[3, 3] = 1f
             return m
         }
 
 
-        fun perspective(fov:Float, aspect:Float, zNear:Float, zFar:Float) : MatrixF {
-            fun coTangent(f:Float) : Float = Math.tanh(f.toDouble()).toFloat()
-            fun degreesToRadians(d:Float) : Float = Math.toRadians(d.toDouble()).toFloat()
-            val q = 1f/Math.tan(Math.toRadians(fov.toDouble()/2.0)).toFloat()
+        fun perspective(fov: Float, aspect: Float, zNear: Float, zFar: Float): MatrixF {
+            fun coTangent(f: Float): Float = Math.tanh(f.toDouble()).toFloat()
+            fun degreesToRadians(d: Float): Float = Math.toRadians(d.toDouble()).toFloat()
+            val q = 1f / Math.tan(Math.toRadians(fov.toDouble() / 2.0)).toFloat()
             val A = q / aspect
-            val B = (zNear+ zFar)/(zNear-zFar)
-            val C = (2f*zNear*zFar)/(zNear-zFar)
+            val B = (zNear + zFar) / (zNear - zFar)
+            val C = (2f * zNear * zFar) / (zNear - zFar)
 
             val m = MatrixF(4, 4)
-            m[0] = MutableVectorF(A, 0f, 0f, 0f)
-            m[1] = MutableVectorF(0f, q, 0f, 0f)
-            m[2] = MutableVectorF(0f, 0f, B, -1f)
-            m[3] = MutableVectorF(0f, 0f, 0f, 0f)
+            m[0] = VectorF(A, 0f, 0f, 0f)
+            m[1] = VectorF(0f, q, 0f, 0f)
+            m[2] = VectorF(0f, 0f, B, -1f)
+            m[3] = VectorF(0f, 0f, 0f, 0f)
             return m
-            /*
-            val y_scale = coTangent(degreesToRadians(fovy / 2f))
-            val x_scale = y_scale / aspect
-            val frustrum_length = zFar - zNear
-
-            val m = MatrixF(4, 4)
-
-            m[0,0] = x_scale
-            m[1,1] = y_scale
-            m[2,2] = -((zFar + zNear) / frustrum_length)
-            m[2,3] = -1.0.toFloat()
-            m[3,2] = -((2.0.toFloat() * zNear * zFar) / frustrum_length)
-            return m
-            */
         }
 
-        /*
-        const Tvec3<T> f = normalize(center - eye);
-    const Tvec3<T> upN = normalize(up);
-    const Tvec3<T> s = cross(f, upN);
-    const Tvec3<T> u = cross(s, f);
-    const Tmat4<T> M = Tmat4<T>(Tvec4<T>(s[0], u[0], -f[0], T(0)),
-                                Tvec4<T>(s[1], u[1], -f[1], T(0)),
-                                Tvec4<T>(s[2], u[2], -f[2], T(0)),
-                                Tvec4<T>(T(0), T(0), T(0), T(1)));
-         */
 
-        public fun lookAt(position: MutableVectorF, centre : MutableVectorF, up: MutableVectorF) : MatrixF {
-            val f = (centre-position).normalise()
+        public fun lookAt(position: VectorF, centre: VectorF, up: VectorF): MatrixF {
+            val f = (centre - position).normalise()
             val upN = up.normalise()
             val s = f.cross(upN)
             val u = s.cross(f)
 
             var m = MatrixF(4, 4)
-            m.col(0, MutableVectorF(s.x, u.x, -f.x, 0))
-            m.col(1, MutableVectorF(s.y, u.y, -f.y, 0))
-            m.col(2, MutableVectorF(s.z, u.z, -f.z, 0))
-            m.col(1, MutableVectorF(0f, 0f, 0f, 1f))
+            m.col(0, VectorF(s.x, u.x, -f.x, 0))
+            m.col(1, VectorF(s.y, u.y, -f.y, 0))
+            m.col(2, VectorF(s.z, u.z, -f.z, 0))
+            m.col(1, VectorF(0f, 0f, 0f, 1f))
             return m
         }
-        public fun lookAt2(position: MutableVectorF, centre : MutableVectorF, up: MutableVectorF) : MatrixF {
+
+        public fun lookAt2(position: VectorF, centre: VectorF, up: VectorF): MatrixF {
             // Compute direction from position to lookAt
             var dirX = centre.x - position.x;
             var dirY = centre.y - position.y;
@@ -345,23 +297,23 @@ static inline Tmat4<T> rotate(T angle, T x, T y, T z)
             val upY = rightZ * dirX - rightX * dirZ;
             val upZ = rightX * dirY - rightY * dirX;
 
-            val m = MatrixF(4,4)
-            m[0,0] = rightX
-            m[0,1] = upX
-            m[0,2] = -dirX
-            m[0,3] = 0.0.toFloat()
-            m[1,0] = rightY
-            m[1,1] = upY
-            m[1,2] = -dirY
-            m[1,3] = 0.0.toFloat()
-            m[2,0] = rightZ
-            m[2,1] = upZ
-            m[2,2] = -dirZ
-            m[2,3] = 0.0.toFloat()
-            m[3,0] = -rightX * position.x - rightY * position.y - rightZ * position.z
-            m[3,1] = -upX * position.x - upY * position.y - upZ * position.z
-            m[3,2] = dirX * position.x + dirY * position.y + dirZ * position.z
-            m[3,3] = 1.0.toFloat()
+            val m = MatrixF(4, 4)
+            m[0, 0] = rightX
+            m[0, 1] = upX
+            m[0, 2] = -dirX
+            m[0, 3] = 0.0.toFloat()
+            m[1, 0] = rightY
+            m[1, 1] = upY
+            m[1, 2] = -dirY
+            m[1, 3] = 0.0.toFloat()
+            m[2, 0] = rightZ
+            m[2, 1] = upZ
+            m[2, 2] = -dirZ
+            m[2, 3] = 0.0.toFloat()
+            m[3, 0] = -rightX * position.x - rightY * position.y - rightZ * position.z
+            m[3, 1] = -upX * position.x - upY * position.y - upZ * position.z
+            m[3, 2] = dirX * position.x + dirY * position.y + dirZ * position.z
+            m[3, 3] = 1.0.toFloat()
             return m
         }
     }

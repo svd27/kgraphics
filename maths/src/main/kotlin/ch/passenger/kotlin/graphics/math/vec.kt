@@ -35,10 +35,11 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
         return 0
     }
     fun toArray(): Array<Float> = Array(dimension) {this[it]}
-    fun times(f: Float): VectorF = VectorF.create(dimension) { this[it] * f }
-    fun minus(): VectorF = times(-1f)
-    fun plus(v: VectorF): VectorF = create(dimension) { this[it] + v[it] }
-    fun minus(v: VectorF): VectorF = create(dimension) { this[it] - v[it] }
+    fun times(f: Float): VectorF = VectorF(dimension) { this[it] * f }
+    fun minus(): VectorF = this*-1f
+    fun plus(v: VectorF): VectorF = VectorF(dimension) { this[it] + v[it] }
+    fun plus(f: Float): VectorF = VectorF(dimension) { this[it] + f }
+    fun minus(v: VectorF): VectorF = VectorF(dimension) { this[it] - v[it] }
     fun magnitude(): Float = this().map { it * it }.foldRight(0f) { l, r -> l + r }.sqrt()
     fun times(v: VectorF): Float = this().merge(v()) { f1, f2 -> f1 * f2 }.foldRight(0f) { acc, c -> acc + c }
     fun times(m:MatrixF) : MatrixF {
@@ -51,11 +52,11 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
     fun normalise(): VectorF {
         val m = magnitude()
         assert(m > 0f, "magnitude $m in $this")
-        return create(dimension) { this[it] / m }
+        return VectorF(dimension) { this[it] / m }
 
     }
 
-    fun cross(v: VectorF): VectorF = create(dimension) {
+    fun cross(v: VectorF): VectorF = VectorF(dimension) {
         assert(dimension==3)
         when (it) {
             0 -> this.y*v.z - this.z*v.y
@@ -67,7 +68,7 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
 
     fun reflect(around:VectorF) :VectorF = around*2f-this
 
-    fun widen(v:Float=1f) : VectorF = create(dimension+1) {if(it<dimension) this[it] else v}
+    fun widen(v:Float=1f) : VectorF = VectorF(dimension+1) {if(it<dimension) this[it] else v}
 
     override fun equals(other: Any?): Boolean {
         if (other is VectorF && other.dimension == dimension) {
@@ -94,8 +95,6 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
 
 
     companion object {
-        private fun create(d:Int, init:(Int)->Float) : VectorF = MutableVectorF(d, init).immutable()
-
         fun distance(a: VectorF, b: VectorF): Float = (b - a).magnitude()
         /**
          * measure angle between three points, moving in direction p0-p1-p2
@@ -207,11 +206,6 @@ open class MutableVectorF(dim: Int, init: (Int) -> Float = { 0f }) : VectorF {
 
     fun timesAssign(f: Float): Unit =array.forEachIndexed { i, fl -> array[i] *= fl }
     fun plusAssign(v: MutableVectorF) {assert(v.dimension==dimension); v().forEachIndexed { i, f -> this[i] += f }}
-
-
-
-
-
 
     fun store(b:FloatBuffer) {
         this().forEach { b.put(it) }
