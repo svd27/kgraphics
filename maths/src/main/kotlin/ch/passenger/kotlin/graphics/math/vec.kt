@@ -91,6 +91,8 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
         wr.writeEndElement()
     }
 
+    fun mix(b:VectorF, t:Float) : VectorF = this + (b-this)*t
+
     fun immutable() : VectorF = this
 
 
@@ -133,6 +135,8 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
 
         fun invoke(vararg ns:Number) = MutableVectorF(*ns)
         fun invoke(d:Int, init:(Int)->Float) = MutableVectorF(d, init)
+
+        fun mix(a:VectorF, b:VectorF, t:Float) : VectorF = a.mix(b, t)
 
         val element = "vector"
 
@@ -324,6 +328,8 @@ trait LineSegment {
             }
         }
     }
+
+    override fun toString(): String = "line($start,$end)"
 
     companion object o {
         fun create(v0: VectorF,v1: VectorF) : LineSegment = object : LineSegment {

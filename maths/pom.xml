@@ -15,13 +15,13 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-jdk14</artifactId>
-        </dependency>
-        <dependency>
             <groupId>ch.passenger.kotlin.graphics</groupId>
             <artifactId>utils</artifactId>
             <version>${graphics.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.parboiled</groupId>
+            <artifactId>parboiled-java</artifactId>
         </dependency>
     </dependencies>
 

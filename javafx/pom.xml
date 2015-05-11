@@ -19,6 +19,9 @@
             <artifactId>maths</artifactId>
             <version>${graphics.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.reactivex</groupId>
+            <artifactId>rxjava</artifactId>
+        </dependency>
     </dependencies>
-
 </project>

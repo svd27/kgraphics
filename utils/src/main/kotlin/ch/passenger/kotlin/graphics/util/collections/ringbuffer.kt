@@ -49,6 +49,10 @@ class RingBuffer<T>(val length:Int) : Iterable<T> {
         return cn.t
     }
 
+    fun clear() {
+        head = null
+    }
+
     override fun iterator(): Iterator<T> = object: Iterator<T> {
         var idx = 0
         override fun hasNext(): Boolean = idx < length

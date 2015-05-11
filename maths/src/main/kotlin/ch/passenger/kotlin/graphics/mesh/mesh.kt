@@ -1,6 +1,7 @@
 package ch.passenger.kotlin.graphics.mesh
 
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
+import ch.passenger.kotlin.graphics.geometry.Triangle
 import ch.passenger.kotlin.graphics.math.LineSegment
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.math.MutableVectorF
@@ -23,16 +24,17 @@ trait Vertex<H,V,F> {
      */
     fun invoke() : Iterable<HalfEdge<H,V,F>> {
         val res = arrayListOf<HalfEdge<H,V,F>>()
+        if(leaving==mesh.NOEDGE) return emptyList()
         var e = leaving
-        while(e.origin==this) {
+        do {
             res.add(e)
             e = e.twin.next
-        }
+
+        } while(e!=leaving && e!=mesh.NOEDGE)
         return res
     }
 
     val isolated : Boolean get() = leaving==mesh.NOEDGE
-
 
     val NOVERTEX : Vertex<H,V,F>
 
@@ -50,7 +52,7 @@ trait HalfEdge<H,V,F> {
     val data: H
     var next:HalfEdge<H,V,F>
     val previous:HalfEdge<H,V,F> get() {
-        val v = origin().firstOrNull{it.twin.next==this}
+        val v = origin().map{it.twin}.firstOrNull{it.next==this}
         if(v==null) return NOEDGE
         else return v
     }
@@ -68,7 +70,7 @@ trait HalfEdge<H,V,F> {
     }
 
     val innerAngle : Float get() {
-        var ang = innerAngle
+        var ang = innerAngleRaw
         if(ang<0) ang += (2*Math.PI).toFloat()
         return ang.toFloat()
     }
@@ -86,12 +88,13 @@ trait HalfEdge<H,V,F> {
     val NOEDGE : HalfEdge<H,V,F>
     fun invoke() : Iterable<HalfEdge<H,V,F>> = object : Iterable<HalfEdge<H,V,F>> {
         override fun iterator(): Iterator<HalfEdge<H, V, F>> = object: Iterator<HalfEdge<H, V, F>> {
-            var current = this@HalfEdge
-            override fun hasNext(): Boolean = current!=NOEDGE
+            var current : HalfEdge<H,V,F>? = null
+            override fun hasNext(): Boolean = current!=NOEDGE && current!=this@HalfEdge
 
             override fun next(): HalfEdge<H, V, F> {
-                var r = current
-                current = current.next
+                if(current==null) current=this@HalfEdge
+                var r = current!!
+                current = current!!.next
                 return r
             }
         }
@@ -108,7 +111,19 @@ trait Face<H,V,F> {
     val hole:Boolean get() = false
     val infinity:Boolean get() = false
     val properFace: Boolean get() = this!=NOFACE && !hole && !infinity
-    override fun equals(other: Any?): Boolean = if(other is Face<*,*,*>) edge().all { it in other.edge() } && other.edge().all { it in edge() } else false
+
+    /**
+     * return a list of tringales fully contained in this face
+     */
+    val triangles : Iterable<Triangle> get() {
+        if(edge().count()==3) {
+            return listOf(Triangle(edge.origin.v, edge.next.origin.v, edge.next.next.origin.v))
+        } else {
+            return edge().map { if(it.innerAngle<Math.PI) Triangle(it.previous.origin.v, it.origin.v, it.next.origin.v) else null}.filterNotNull()
+        }
+    }
+
+    override fun equals(other: Any?): Boolean = if(other is Face<*,*,*> && other.properFace) edge().all { it in other.edge() } && other.edge().all { it in edge() } else false
 
     override fun hashCode(): Int = id.hashCode()
 
@@ -117,7 +132,7 @@ trait Face<H,V,F> {
 }
 
 class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), VectorF(1f,1f,1f)),
-                  val faceFactory:(HalfEdge<H,V,F>)->F) {
+                  val faceFactory:(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F) {
     private var vids : Long = 0L
 
     val NOVERTEX = object : Vertex<H,V,F> {
@@ -134,6 +149,7 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
             get() = this
         override val mesh: Mesh<H, V, F>
             get() = this@Mesh
+        override fun invoke(): Iterable<HalfEdge<H, V, F>> = emptyList()
         override fun equals(other: Any?): Boolean = identityEquals(other)
         override fun toString(): String = "NOVERTEX"
     }
@@ -147,6 +163,8 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
         override var next: HalfEdge<H, V, F>
             get() = this
         set(v){}
+        override val previous: HalfEdge<H, V, F>
+            get() = this
         override var left: Face<H, V, F>
             get() = NOFACE
         set(v) {}
@@ -154,6 +172,8 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
             get() = NOVERTEX
         override val NOEDGE: HalfEdge<H, V, F>
             get() = this
+
+        override fun invoke(): Iterable<HalfEdge<H, V, F>> = emptyList()
         override fun equals(other: Any?): Boolean = identityEquals(other)
         override fun toString(): String = "NOEDGE"
     }
@@ -162,46 +182,39 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
             get() = throw UnsupportedOperationException()
         override var name: String = "NOFACE"
         override val id: Int get() = -1
-        override val edge: HalfEdge<H, V, F>
-            get() = throw UnsupportedOperationException()
-        override val data: F
-            get() = throw UnsupportedOperationException()
-        override val NOFACE: Face<H, V, F>
-            get() = this
+        override val edge: HalfEdge<H, V, F> get() = throw UnsupportedOperationException()
+        override val data: F get() = throw UnsupportedOperationException()
+        override val NOFACE: Face<H, V, F> get() = this
+        override val hole: Boolean get() = false
+        override val infinity: Boolean get() = false
+        override val properFace: Boolean get() = false
+        override val triangles: Iterable<Triangle> get() = emptyList()
 
         override fun equals(other: Any?): Boolean = identityEquals(other)
         override fun toString(): String = "NOFACE"
     }
 
     val HOLE = object : Face<H,V,F> {
-        override val parent: Face<H, V, F>
-            get() = NOFACE
+        override val parent: Face<H, V, F> get() = NOFACE
         override var name: String = "HOLE"
         override val id: Int get() = -2
-        override val edge: HalfEdge<H, V, F>
-            get() = NOEDGE
-        override val data: F
-            get() = throw UnsupportedOperationException()
-        override val hole: Boolean
-            get() = true
-        override val NOFACE: Face<H, V, F>
-            get() = this@Mesh.NOFACE
+        override val edge: HalfEdge<H, V, F> get() = NOEDGE
+        override val data: F get() = throw UnsupportedOperationException()
+        override val hole: Boolean get() = true
+        override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
+        override val triangles: Iterable<Triangle> get() = emptyList()
         override fun equals(other: Any?): Boolean = identityEquals(other)
     }
 
     val INFINITY = object : Face<H,V,F> {
-        override val parent: Face<H, V, F>
-            get() = NOFACE
+        override val parent: Face<H, V, F> get() = NOFACE
         override var name: String = "INF"
         override val id: Int get() = -3
-        override val edge: HalfEdge<H, V, F>
-            get() = NOEDGE
-        override val data: F
-            get() = throw UnsupportedOperationException()
-        override val infinity: Boolean
-            get() = true
-        override val NOFACE: Face<H, V, F>
-            get() = this@Mesh.NOFACE
+        override val edge: HalfEdge<H, V, F> get() = NOEDGE
+        override val data: F get() = throw UnsupportedOperationException()
+        override val infinity: Boolean get() = true
+        override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
+        override val triangles: Iterable<Triangle> get() = emptyList()
         override fun equals(other: Any?): Boolean = identityEquals(other)
     }
 
@@ -220,23 +233,21 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
         override val twin: HalfEdge<H, V, F> get() = _twin!!
 
         override var next: HalfEdge<H, V, F> = NOEDGE
-
         override var left: Face<H, V, F> = NOFACE
 
-
-        override val NOEDGE: HalfEdge<H, V, F>
-            get() = this@Mesh.NOEDGE
+        override val NOEDGE: HalfEdge<H, V, F> get() = this@Mesh.NOEDGE
     }
 
     private inner class MFace(override val parent: Face<H, V, F>, override val edge:HalfEdge<H, V, F>, override val data:F, name:String, override val id:Int=fids++) : Face<H,V,F> {
         override var name: String = name
             get() = if($name.isEmpty()) "$id" else $name
             set(v) {$name = v}
-        override val NOFACE: Face<H, V, F>
-            get() = this@Mesh.NOFACE
+        override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
+
         init {
             edge().forEach { it.left=this }
             octree + this
+            mfaces[id] = this
             handleFaceAdd(this)
         }
     }
@@ -317,8 +328,9 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
     }
 
     fun plus(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>, data:H, twin:H=data) : Mesh<H,V,F> {
+        if(v0==v1) throw IllegalArgumentException("null edge $v0=>$v1 not allowed")
         val key = v0 to v1
-        if(key in medges) throw DuplicateElementException(medges[key]!!, "Duplicate Vertex ${medges[key]}")
+        if(key in medges) throw DuplicateElementException(medges[key]!!, "Duplicate Edge ${medges[key]}")
         createEdge(v0, v1, data, twin)
 
         return this
@@ -331,12 +343,18 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
         twin._twin = e
         medges[e.key] = e
         medges[twin.key] = twin
-        octree + e + twin
+        octree + e
+        octree + twin
 
         if(v0.leaving==NOEDGE) v0.leaving=e
         if(v1.leaving==NOEDGE) v1.leaving=twin
 
-        landingAt(e); landingAt(e.twin)
+        landingAt(e);
+        assert(e.previous==NOEDGE||e.previous.next==e, "bad link in main edge $e")
+        assert(e.twin.previous==NOEDGE||e.twin.previous.next==e.twin, "bad link in twin edge ${e.twin}")
+        landingAt(e.twin)
+        assert(e.previous==NOEDGE||e.previous.next==e, "bad link in main edge $e")
+        assert(e.twin.previous==NOEDGE||e.twin.previous.next==e.twin, "bad link in twin edge ${e.twin}")
 
         handleEdgeAdd(e); handleEdgeAdd(e.twin)
         return e
@@ -345,35 +363,59 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
     fun unlinkFace(f:Face<H,V,F>) {
         f.edge().forEach { it.left=NOFACE }
         mfaces.remove(f.id)
+        octree - f
+        handleFaceRemove(f)
+    }
+
+    fun linkFace(e:HalfEdge<H,V,F>, p:Face<H,V,F>, n:String="") {
+        val f = MFace(p, e, faceFactory(e, p), n)
+        mfaces[f.id] = f
     }
 
     fun landingAt(e:HalfEdge<H,V,F>) {
-        if(e.next!=NOEDGE) return
+        if(e.next!=NOEDGE) {
+            if(!e.left.properFace && e.cycle && e.insideLooking) {
+                linkFace(e, NOFACE)
+            }
+            return
+        }
         val next = e.destination().filter { it!=e.twin && it!=NOEDGE }.sortBy {VectorF.angle3p(e.origin.v, e.destination.v, it.destination.v)}.firstOrNull()
         if(next!=null) {
-            val parent =
-                    if (next.left.properFace) {
-                        val f = next.left
-                        unlinkFace(f)
-                        f
-                    } else NOFACE
-            val prev = if(parent!=NOFACE) {
-                next().filter { it.destination==e.origin }.first()
-            } else NOEDGE
-            val twnext = if(prev!=NOEDGE) prev.next else NOEDGE
-            if(next.previous!=NOEDGE) next.previous.next = e.twin
-            e.next = next
-            if(prev!=NOEDGE) prev.next = e
-            if(twnext!=NOEDGE) e.twin.next = twnext
-            if(e.cycle) {
-                if(parent!=NOFACE) {
-                    e.left = MFace(parent, e, parent.data, "F:P${parent.id}:C${1}")
-                    e.twin.left = MFace(parent, e.twin, parent.data, "F:P${parent.id}:C${2}")
-                } else {
-                    e.left = MFace(parent, e, faceFactory(e), "")
-                }
+            if(next.cycle) {
+                return split(e, next)
             }
+            if(next.left.properFace) throw IllegalStateException()
+            val np = next.previous
+            e.next = next
+            if(np!=NOEDGE) np.next=e.twin
         }
+        val prev = e.origin().filter { assert(it.origin==e.origin); it!=e }.map { it.twin }.sortBy {VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v)}.firstOrNull()
+        if(prev!=null && prev!=NOEDGE && e.previous==NOEDGE) {
+            assert(prev!=e.twin)
+            val pn = prev.next
+            if(pn!=NOEDGE) e.twin.next=pn
+            prev.next = e
+        }
+        if(e.cycle && e.insideLooking && !e.left.properFace) {
+            linkFace(e, NOFACE)
+        }
+        if(e.twin.cycle && e.twin.insideLooking && !e.twin.left.properFace) {
+            linkFace(e.twin, NOFACE)
+        }
+    }
+
+    fun split(e:HalfEdge<H,V,F>, sp:HalfEdge<H,V,F>) {
+        val prev = sp().first { it.destination==e.origin }
+        val twnext = prev.next
+        val twprev = sp.previous
+        val parent = if(sp.left.properFace) sp.left else NOFACE
+        prev.next = e
+        e.next = sp
+        e.twin.next = twnext
+        twprev.next = e.twin
+        if(parent.properFace) unlinkFace(parent)
+        linkFace(e, parent, "SPLIT(${if(parent.properFace)parent.name else ""}, ${e.origin.id}->${e.destination.id})")
+        linkFace(e.twin, parent, "SPLIT(${if(parent.properFace)parent.name else ""}, ${e.twin.origin.id}->${e.twin.destination.id})")
     }
 
     val edges:Iterable<HalfEdge<H,V,F>> = medges.values()
@@ -381,6 +423,7 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
     val faces:Iterable<Face<H,V,F>> = mfaces.values()
     fun find(hotzone:AlignedCube) : Octree.Result<H,V,F> = octree.find(hotzone)
     fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = octree.findEdges(hotzone)
+    fun findVertices(hotzone:AlignedCube) : Iterable<Vertex<H,V,F>> = octree.findVertices(hotzone)
 }
 
 open class MeshException(msg:String="", cause:Throwable?=null, suppress:Boolean=false, writable:Boolean=false) : Exception(msg, cause, suppress, writable)

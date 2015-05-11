@@ -207,7 +207,7 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     }
 
     companion object o {
-
+        fun scale(f:Float) : MatrixF = scale(VectorF(f, f, f, 1))
 
         fun scale(v: VectorF): MatrixF {
             val sv = if (v.dimension < 4) v.widen(1f) else v
