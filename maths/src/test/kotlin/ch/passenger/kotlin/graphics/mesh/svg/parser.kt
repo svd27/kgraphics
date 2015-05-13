@@ -195,11 +195,12 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
     Test
     fun paths() {
         val paths = """M3 2 4   1l2  3l3 4z M12 2 3 2z
-        M4 1-4 3L23 3c1 2 3 4 5   6 7 8s12 2 13 4
+        M4 1-4 3L23 3c1 2 3 4 5   6 7 8s12 2 13 4s.44 .22 .33 .44
+        M0 0
         """
         val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
         log.info("nlc: ${paths.filter { it=='\n' }.count()}")
-        val res = BasicParseRunner<List<SVGPath>>(svgp.paths()).run(paths.replace('\n', ' '))
+        val res = BasicParseRunner<List<SVGPath>>(svgp.paths()).run(paths)
         if(res.parseErrors.size()>0) dumpErrors(res.parseErrors)
         assertNotNull(res.resultValue)
         assert(res.resultValue is Iterable<SVGPath>, "res: ${res.resultValue.javaClass}")
@@ -212,13 +213,13 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
         val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
         log.debug(dollar)
         log.info("nlc: ${dollar.filter { it=='\n' }.count()}")
-        val inp : InputBuffer = DefaultInputBuffer(dollar.replace('\n', ' ').toCharArray())
-        val res = BasicParseRunner<Iterable<SVGPath>>(svgp.paths()).run(inp)
+        val res = BasicParseRunner<Iterable<SVGPath>>(svgp.paths()).run(dollar)
         if(res.parseErrors.size()>0) dumpErrors(res.parseErrors)
         assertNotNull(res.resultValue)
         assert(res.resultValue is Iterable<SVGPath>, "res: ${res.resultValue.javaClass}")
         val p = res.resultValue
         p.forEach { dumpPath(it) }
+
     }
 
     fun dumpErrors(errs:Iterable<ParseError>) {

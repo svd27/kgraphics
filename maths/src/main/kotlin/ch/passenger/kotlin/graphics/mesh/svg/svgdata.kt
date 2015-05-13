@@ -1,12 +1,19 @@
 package ch.passenger.kotlin.graphics.mesh.svg
 
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
+import ch.passenger.kotlin.graphics.geometry.CubicBezier
+import ch.passenger.kotlin.graphics.geometry.Curve
+import ch.passenger.kotlin.graphics.geometry.QuadBezier
 import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.mesh.Face
 import ch.passenger.kotlin.graphics.mesh.HalfEdge
 import ch.passenger.kotlin.graphics.mesh.Mesh
 import ch.passenger.kotlin.graphics.mesh.Vertex
+import ch.passenger.kotlin.graphics.util.logging.t
+import ch.passenger.kotlin.graphics.util.logging.w
+import ch.qos.logback.classic.Level
+import javafx.scene.canvas.GraphicsContext
 import org.parboiled.BaseParser
 import org.parboiled.Parboiled
 import org.parboiled.Rule
@@ -24,44 +31,160 @@ import kotlin.reflect.jvm.java
  * Created by svd on 09/05/2015.
  */
 trait SVGMeshData {
+    var pred : SVGMeshData?
+    val origin : VectorF
+    val target:VectorF
     companion object {
-        open data class MD(override val paths: Iterable<SVGPath>, override val path: Int, override val idxPathelement: Int) :SVGPathMeshData
-        open data class MDCurve(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int) : MD(paths, path, idxPathelement) {
-            private fun cps() : Iterable<VectorF> {
+        open data class MD(override val paths: Iterable<SVGPath>, override val pathIdx: Int, override val idxPathelement: Int, override val coordOffset:Int, override var pred: SVGMeshData?) : SVGPathMeshData
+        open data class MDCurve(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, coordOffset:Int, pred: SVGMeshData?) : MD(paths, path, idxPathelement, coordOffset, pred), SVGCurveMeshData {
+            override val curve: Curve
+                get() {
+                    val pe = pathElement
+                    when (pathElement) {
+                        is SVGCubic -> {
+                            var start = origin
+                            val i = coordOffset
+                            if (pe.relative) {
+                                val a = start
+                                val b = a + pe.coords.elementAt(i)
+                                val c = a + pe.coords.elementAt(i + 1)
+                                val d = a + pe.coords.elementAt(i + 2)
+                                return CubicBezier(a, d, listOf(b, c))
+                            } else {
+                                val a = start
+                                val b = pe.coords.elementAt(i)
+                                val c = pe.coords.elementAt(i + 1)
+                                val d = pe.coords.elementAt(i + 2)
+                                return CubicBezier(a, d, listOf(b, c))
+                            }
+
+                        }
+                        is SVGSmoothCubic -> {
+                            val prev = pred
+                            if(prev is SVGCurveMeshData && (prev.pathElement is SVGCubic || prev.pathElement is SVGSmoothCubic)) {
+                                val cp1 = prev.curve.cps.last().reflect(origin)
+                                val a = origin
+                                val c =if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
+                                val d = if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset+1)
+                                return CubicBezier(a, d, listOf(cp1, c))
+                            } else throw UnsupportedOperationException()
+                        }
+                        is SVGQuad -> {
+                            val b = if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
+                            val c = if(pe.relative) origin+pe.coords.elementAt(coordOffset+1) else pe.coords.elementAt(coordOffset+1)
+                            return QuadBezier(origin, c, listOf(b))
+                        }
+                        is SVGSmoothQuad -> {
+                            val prev = pred
+                            if(prev is SVGCurveMeshData && (prev.pathElement is SVGQuad || prev.pathElement is SVGSmoothQuad)) {
+                                val cp1 = prev.curve.cps.first().reflect(origin)
+                                return QuadBezier(origin, target, listOf(cp1))
+                            } else throw UnsupportedOperationException()
+                        }
+                        else -> throw IllegalArgumentException()
+                    }
+                }
+        }
+
+            fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, offset:Int, pred: SVGMeshData?): SVGMeshData {
                 val pe = paths.elementAt(path).elements[idxPathelement]
-                return when(pe) {
-                    is SVGCubic -> {
-                        pe.coords.mapIndexed { i, v -> i to v }.filter { it.first%3!=0 }.map { it.second }
-                    }
-                    is SVGSmoothCubic -> {
-                        pe.coords.mapIndexed { i, v -> i to v }.filter { it.first%2==0 }.map { it.second }
-                    }
-                    is SVGQuad -> {
-                        pe.coords.mapIndexed { i, v -> i to v }.filter { it.first%2==0 }.map { it.second }
-                    }
-                    is SVGSmoothQuad -> emptyList<VectorF>()
-                    else -> throw IllegalArgumentException()
+                return when (pe) {
+                    is SVGQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
+                    is SVGSmoothQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
+                    is SVGCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
+                    is SVGSmoothCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
+                    else -> MD(paths, path, idxPathelement, offset, pred)
                 }
             }
-        }
-        fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int) : SVGMeshData {
-            val pe = paths.elementAt(path).elements[idxPathelement]
-            return when(pe) {
-                is SVGQuad -> MDCurve(paths, path, idxPathelement)
-                else -> MD(paths, path, idxPathelement)
+
+            fun reverse(): SVGMeshData = object : SVGReversePath {
+                override var pred: SVGMeshData?
+                    get() = null
+                    set(value) {
+                    }
+                override val origin: VectorF
+                    get() = VectorF(0, 0, 0)
+                override val target: VectorF
+                    get() = origin
             }
         }
-        fun reverse() : SVGMeshData = object : SVGReversePath {}
-    }
 
 }
 trait SVGReversePath : SVGMeshData
 trait SVGPathMeshData : SVGMeshData {
     val paths:Iterable<SVGPath>
-    val path : Int
+    val pathIdx: Int
     val idxPathelement : Int
-    val pathElement:SVGPathElement get() = paths.elementAt(path).elements[idxPathelement]
+    val path :SVGPath get() = paths.elementAt(pathIdx)
+    val pathElement:SVGPathElement get() = paths.elementAt(pathIdx).elements[idxPathelement]
+    val coordOffset : Int
+    override val origin : VectorF get() =
+        if(pathElement is SVGMove) pathElement.coords.first()
+        else pred!!.target
 
+    override val target : VectorF get() {
+        if(pathElement.relative) {
+            return when(pathElement) {
+                is SVGMove -> {
+                    return origin
+                }
+                is SVGLine -> {
+                    return origin+pathElement.coords.elementAt(coordOffset)
+                }
+                is SVGCubic -> {
+                    return origin+pathElement.coords.elementAt(coordOffset+2)
+                }
+                is SVGSmoothCubic -> {
+                    return origin+pathElement.coords.elementAt(coordOffset+1)
+                }
+                is SVGQuad -> {
+                    return origin+pathElement.coords.elementAt(coordOffset+1)
+                }
+                is SVGSmoothQuad -> {
+                    return origin+pathElement.coords.elementAt(coordOffset)
+                }
+                is SVGClose -> {
+                    var apred = pred!!
+                    while(apred.pred!=null) apred = apred.pred!!
+                    assert(apred is SVGPathMeshData && apred.pathElement is SVGMove )
+                    return apred.origin
+                }
+                else -> throw IllegalStateException("$pathElement ${pathElement.javaClass}")
+            }
+        } else {
+            return when(pathElement) {
+                is SVGMove -> {
+                    return origin
+                }
+                is SVGLine -> {
+                    return pathElement.coords.elementAt(coordOffset)
+                }
+                is SVGCubic -> {
+                    return pathElement.coords.elementAt(coordOffset+2)
+                }
+                is SVGSmoothCubic -> {
+                    return pathElement.coords.elementAt(coordOffset+1)
+                }
+                is SVGQuad -> {
+                    return pathElement.coords.elementAt(coordOffset+1)
+                }
+                is SVGSmoothQuad -> {
+                    return pathElement.coords.elementAt(coordOffset)
+                }
+                is SVGClose -> {
+                    var apred = pred!!
+                    while(apred.pred!=null) apred = apred.pred!!
+                    assert(apred is SVGPathMeshData && apred.pathElement is SVGMove )
+                    return apred.origin
+                }
+                else -> throw IllegalStateException("$pathElement ${pathElement.javaClass}")
+            }
+        }
+    }
+}
+
+trait SVGCurveMeshData : SVGPathMeshData {
+    val curve : Curve
 }
 
 
@@ -71,61 +194,64 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                    ce:(SVGMeshData, Vertex<H, V, F>,Vertex<H, V, F>)->H,
                    cf:(SVGMeshData, parent: Face<H,V,F>, edge:HalfEdge<H,V,F>)->F
                    )  : Mesh<H,V,F> {
+    val log = LoggerFactory.getLogger("SVG")
+    if(log is ch.qos.logback.classic.Logger) {
+        log.setLevel(Level.TRACE)
+    }
 
 
-    val ex : AlignedCube
-    if(extent==null) {
-        val min = MutableVectorF(3) {Float.MAX_VALUE}
-        val max = MutableVectorF(3) {Float.MIN_VALUE}
-        paths.forEach {
-            it.elements.forEach {
-                it.coords.forEach {
-                    it().forEachIndexed { i, fl ->
-                        if(min[i]>fl) min[i] = fl
-                        if(max[i]<fl) max[i] = fl
-                    }
-                }
-            }
-        }
-        min().forEachIndexed { i, fl -> if(fl==Float.MAX_VALUE) min[i]=-1f }
-        max().forEachIndexed { i, fl -> if(fl==Float.MIN_VALUE) max[i]=1f }
-        ex = AlignedCube(min, max)
-    } else ex = extent
-
-    val m = Mesh<H,V,F>(ex, { e, parent ->
+    val m = Mesh<H,V,F>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), { e, parent ->
         cf(e.data, parent, e)
     })
 
     paths.forEachIndexed { idxPath, path ->
+        var pred : SVGMeshData? = null
         var current : Vertex<H,V,F>? = null
+        var vstart : Vertex<H,V,F>? = null
         path.elements.forEachIndexed { idxElement, element ->
-            fun data() : SVGMeshData = SVGMeshData(paths, idxPath, idxElement)
+            var offset:Int = 0
+            fun data() : SVGMeshData {val data =SVGMeshData(paths, idxPath, idxElement, offset, pred); pred=data; return data}
+            fun vdata() : SVGMeshData = SVGMeshData(paths, idxPath, idxElement, offset, pred)
             fun revp() : SVGMeshData = SVGMeshData.reverse()
+            fun vert(v:VectorF) : Vertex<H,V,F> = if(v in m) m[v]!! else m.add(v, cv(vdata(), v))
             fun line(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>) {
+                log.t{ "edge $v0->$v1"}
                 m.plus(v0, v1, ce(data(), v0, v1), ce(revp(), v1, v0))
             }
             fun line(v:VectorF) {
+                log.t(element, current?:"") {"->$element $current ${element.svg}"}
                 val target = if(element.relative) current!!.v+v else v
-                val vert = m.add(target, cv(data(), v))
+                val vert = vert(target)
+                if(current!=vert)
                 line(current!!, vert)
+                else log.w {"ignored empty edge ${current}->${vert} ${element} ${element.svg}"}
                 current=vert
+                log.t(element, current?:"") {"<-$element $current"}
             }
             fun lines(coords:Iterable<VectorF>) {
+                log.t(element, current?:"") {">>$element $current ${element.svg}"}
                 var start = current!!
                 coords.forEach {
-                    val target = if(element.relative) start.v+it else it
-                    current = m.add(target, cv(data(), target))
+                    val target = if(element.relative) current!!.v+it else it
+                    current = vert(target)
+                    if(current!=start)
                     line(start, current!!)
+                    else log.w {"ignored empty edge ${start}->${current} ${element} ${element.svg}"}
                     start = current!!
+                    offset++
                 }
+                log.t(element, current?:"") {"<<$element $current ${element.svg}"}
             }
+            offset = 0
             when(element) {
                 is SVGMove -> {
                     assert(idxElement==0)
                     val pos :VectorF= element.coords.first()
                     current = m.add(pos, cv(data(), pos))
+                    log.t {"M at $current"}
+                    vstart = current
                     val tail = element.coords.drop(1)
-                    lines(tail)
+                    if(tail.count()>0) lines(tail)
                 }
                 is SVGLine -> {
                     lines(element.coords)
@@ -138,24 +264,31 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                 }
                 is SVGCubic -> {
                     for(i in 0..element.coords.count()-1 step 3) {
-                        val pos = if(element.relative) current!!.v+element.coords.elementAt(i+2) else element.coords.elementAt(i+2)
+                        offset+=i
+                        val pos = element.coords.elementAt(i+2)
                         line(pos)
                     }
                 }
                 is SVGSmoothCubic -> {
                     for(i in 0..element.coords.count()-1 step 2) {
-                        val pos = if(element.relative) current!!.v+element.coords.elementAt(i+1) else element.coords.elementAt(i+1)
+                        offset+=i
+                        val pos = element.coords.elementAt(i+1)
                         line(pos)
                     }
                 }
                 is SVGQuad -> {
                     for(i in 0..element.coords.count()-1 step 2) {
-                        val pos = if(element.relative) current!!.v+element.coords.elementAt(i+1) else element.coords.elementAt(i+1)
+                        offset+=i
+                        val pos = element.coords.elementAt(i+1)
                         line(pos)
                     }
                 }
                 is SVGSmoothQuad -> {
                     lines(element.coords)
+                }
+                is SVGClose -> {
+                    if(current!=vstart)
+                    line(current!!, vstart!!)
                 }
             }
         }
@@ -164,19 +297,21 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
 }
 
 
-abstract class SVGPathElement(val id:Char, val coords:Iterable<VectorF>, val relative:Boolean=id.isLowerCase())
-object  SVGNoop : SVGPathElement(' ', emptyList(), false)
-class SVGClose(id:Char) : SVGPathElement(id, emptyList())
-class SVGMove(id:Char, coords:Iterable<VectorF>) : SVGPathElement(id, coords)
-open class SVGLine(id:Char, coords:Iterable<VectorF>) : SVGPathElement(id, coords)
-class SVGHorizontal(id:Char, coords:Iterable<VectorF>) : SVGLine(id, coords)
-class SVGVertical(id:Char, coords:Iterable<VectorF>) : SVGLine(id, coords)
-open class SVGCurve(op:Char, coords:Iterable<VectorF>) : SVGPathElement(op, coords)
-class SVGCubic(id:Char, coords:Iterable<VectorF>) : SVGCurve(id, coords) {init {assert(coords.count()%3==0)}}
-class SVGSmoothCubic(id:Char, coords:Iterable<VectorF>) : SVGCurve(id, coords) {init {assert(coords.count()%2==0)}}
-class SVGQuad(id:Char, coords:Iterable<VectorF>) : SVGCurve(id, coords)
-class SVGSmoothQuad(id:Char, coords:Iterable<VectorF>) : SVGCurve(id, coords)
-class SVGArcElement(val arcs:Iterable<SVGArcDef>, coords:Iterable<VectorF>, relative:Boolean) : SVGPathElement('a', coords, relative)
+abstract class SVGPathElement(val id:Char, val coords:Iterable<VectorF>, val svg:String, val relative:Boolean=id.isLowerCase()) {
+    override fun toString(): String = "SVGPathElement: $id(${coords.count()})"
+}
+object  SVGNoop : SVGPathElement(' ', emptyList(), "", false)
+class SVGClose(id:Char) : SVGPathElement(id, emptyList(), "")
+class SVGMove(id:Char, coords:Iterable<VectorF>, svg:String) : SVGPathElement(id, coords, svg)
+open class SVGLine(id:Char, coords:Iterable<VectorF>, svg:String) : SVGPathElement(id, coords, svg)
+class SVGHorizontal(id:Char, coords:Iterable<VectorF>, svg:String) : SVGLine(id, coords, svg)
+class SVGVertical(id:Char, coords:Iterable<VectorF>, svg:String) : SVGLine(id, coords, svg)
+open class SVGCurve(op:Char, coords:Iterable<VectorF>, svg:String) : SVGPathElement(op, coords, svg)
+class SVGCubic(id:Char, coords:Iterable<VectorF>, svg:String) : SVGCurve(id, coords, svg) {init {assert(coords.count()%3==0)} }
+class SVGSmoothCubic(id:Char, coords:Iterable<VectorF>, svg:String) : SVGCurve(id, coords, svg) {init {assert(coords.count()%2==0)}}
+class SVGQuad(id:Char, coords:Iterable<VectorF>, svg:String) : SVGCurve(id, coords, svg)
+class SVGSmoothQuad(id:Char, coords:Iterable<VectorF>, svg:String) : SVGCurve(id, coords, svg)
+class SVGArcElement(val arcs:Iterable<SVGArcDef>, coords:Iterable<VectorF>, svg:String) : SVGPathElement('a', coords, svg)
 class SVGArcDef(val rx:Float, val ry:Float, large:Boolean, sweep:Boolean)
 class SVGPath(val elements:List<SVGPathElement>) {
     override fun toString(): String = elements.map { "${it.id}(${it.coords.count()})" }.join(" ", "p: ", ".")
@@ -246,31 +381,27 @@ open class SVGPathParser() : org.parboiled.BaseParser<Any>() {
 
 
     open fun move() : Rule = Sequence(AnyOf("mM"), push(matchedChar()), floatPairList(), push(SVGMove(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun line() : Rule = Sequence(AnyOf("lL"), push(matchedChar()), floatPairList(), push(SVGLine(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun hline() : Rule = Sequence(AnyOf("hH"), push(matchedChar()), numlist(0), push(SVGHorizontal(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun vline() : Rule = Sequence(AnyOf("vV"), push(matchedChar()), numlist(1), push(SVGVertical(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun cubic() : Rule = Sequence(AnyOf("cC"), push(matchedChar()), firstPair(), headPair(), tailPairList(),
-             push(SVGCurve(pop(1) as Char, pop() as Iterable<VectorF>)))
+             push(SVGCubic(pop(1) as Char, pop() as Iterable<VectorF>, match())))
     open fun smooth() : Rule = Sequence(AnyOf("sS"), push(matchedChar()), floatPairList(), push(SVGSmoothCubic(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun quad() : Rule = Sequence(AnyOf("qQ"), push(matchedChar()), floatPairList(), push(SVGQuad(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
+            pop() as Iterable<VectorF>, match())))
     open fun qsmooth() : Rule = Sequence(AnyOf("tT"), push(matchedChar()), floatPairList(), push(SVGSmoothQuad(pop(1) as Char,
-            pop() as Iterable<VectorF>)))
-    open fun close() : Rule = Sequence(AnyOf("zZ"), push(SVGClose(matchedChar())))
-    open fun draws() : Rule = OneOrMore(FirstOf(
-            Sequence(line(), push((pop(1) as List<*>)+pop())),
-            Sequence(cubic(), push((pop(1) as List<*>)+pop())),
-            Sequence(smooth(), push((pop(1) as List<*>)+pop())),
-            Sequence(quad(), push((pop(1) as List<*>)+pop())),
-            Sequence(qsmooth(), push((pop(1) as List<*>)+pop())),
-            Sequence(hline(), push((pop(1) as List<*>)+pop())),
-            Sequence(vline(), push((pop(1) as List<*>)+pop()))
-    ))
+            pop() as Iterable<VectorF>, match())))
+    open fun close() : Rule = Sequence(ZeroOrMore(ws()), AnyOf("zZ"), push(SVGClose(matchedChar())), ZeroOrMore(ws()))
+    open fun draws() : Rule = OneOrMore(draw())
+    open fun draw() : Rule = Sequence(ZeroOrMore(ws()),
+            FirstOf(line(), cubic(), smooth(), quad(), qsmooth(), hline(), vline()),
+            push((pop(1) as List<*>)+pop()), ZeroOrMore(ws())
+    )
     open fun closed() : Rule = Sequence(close(), push((pop(1) as List<*>)+pop()), debug("@@@@@closed"))
     open fun path() : Rule = Sequence(Sequence(move(), push(listOf(pop())), debug("###pmove")),
             ZeroOrMore(draws()), Optional(closed()),
@@ -285,27 +416,16 @@ open class SVGPathParser() : org.parboiled.BaseParser<Any>() {
     ))
 
     open fun debug(s:String="") : Boolean {
+        val log = LoggerFactory.getLogger("PARSE")
         val vs = getContext().getValueStack()
-        println(s)
+        log.debug(s)
+        log.debug(getContext().getInputBuffer().extract(getContext().getMatchRange()))
         vs.forEachIndexed {
             idx, it ->
-            println("$idx: $it")
+            log.debug("$idx: $it")
         }
+
         return true
     }
 
-}
-
-fun main(args: Array<String>) {
-    //val p : SVGPathParserPhew = Parboiled.createParser(javaClass<SVGPathParserPhew>())
-    val xml = """
-    <glyph unicode="&#xf00a;" horiz-adv-x="1792" d="M512 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 288v-192q0 -40 -28 -68t-68 -28h-320 q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28 h320q40 0 68 -28t28 -68zM1792 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 800v-192 q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68z" />
-    """
-
-    val path1 = "M512 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 288v-192q0 -40 -28 -68t-68 -28h-320 q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28 h320q40 0 68 -28t28 -68zM1792 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 800v-192 q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68z"
-    val path2 = "M512 288,12 20l 12 20 -.222e3 222v-.11-22 -.3,4"
-    val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
-    val res = TracingParseRunner<List<SVGPathElement>>(svgp.path()).run(path2)
-    //val res = TracingParseRunner<List<SVGPathElement>>(svgp.paths()).run("M-.2e-3,.2222 12 -3.154")
-    println(ParseTreeUtils.printNodeTree(res))
 }

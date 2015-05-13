@@ -16,7 +16,7 @@ import javax.xml.stream.events.XMLEvent
 fun Float.sqrt(): Float = Math.sqrt(this.toDouble()).toFloat()
 
 
-trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
+trait VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
     public val dimension:Int
     public val x : Float get() = get(0)
     public val y: Float  get() = this[1]
@@ -24,7 +24,6 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
     public val w: Float  get() = this[3]
 
     fun get(i:Int) : Float
-    fun mutable() : MutableVectorF = MutableVectorF(this)
     fun invoke() : Iterable<Float> = Array(dimension) {this[it]}.toList()
     override fun compareTo(other: VectorF): Int {
         if(dimension!=other.dimension) throw IllegalStateException("$dimension != ${other.dimension}")
@@ -93,8 +92,12 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
 
     fun mix(b:VectorF, t:Float) : VectorF = this + (b-this)*t
 
-    fun immutable() : VectorF = this
+    fun immutable() : VectorF = if(this is MutableVectorF) ImmutableVectorF(this) else this
+    fun mutable() : MutableVectorF = MutableVectorF(this)
 
+    fun store(b:FloatBuffer) {
+        this().forEach { b.put(it) }
+    }
 
     companion object {
         fun distance(a: VectorF, b: VectorF): Float = (b - a).magnitude()
@@ -133,8 +136,10 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
             return distance(p, proj)
         }
 
-        fun invoke(vararg ns:Number) = MutableVectorF(*ns)
-        fun invoke(d:Int, init:(Int)->Float) = MutableVectorF(d, init)
+        fun invoke(vararg ns:Number) : VectorF = ImmutableVectorF(*ns) as VectorF
+        fun invoke(d:Int, init:(Int)->Float) : VectorF = ImmutableVectorF(d, init) as VectorF
+        fun invoke(v:VectorF) : VectorF = ImmutableVectorF(v) as VectorF
+
 
         fun mix(a:VectorF, b:VectorF, t:Float) : VectorF = a.mix(b, t)
 
@@ -142,11 +147,11 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
 
         init {
 
-            XMLWriteableRegistry.register<MutableVectorF>(MutableVectorF::class, object : XMLWritableFactory<MutableVectorF> {
+            XMLWriteableRegistry.register<VectorF>(VectorF::class, object : XMLWritableFactory<VectorF> {
                 override val name: String
                     get() = element
 
-                override fun readXML(r: XMLStreamReader): MutableVectorF {
+                override fun readXML(r: XMLStreamReader): VectorF {
                     val values = r.attribute("values")
                     while(r.next()!=XMLStreamConstants.END_ELEMENT) {}
                     val vs = values.split(",")
@@ -160,28 +165,10 @@ trait VectorF : Comparable<VectorF>, XMLWritable<MutableVectorF> {
     }
 }
 
-open class MutableVectorF(dim: Int, init: (Int) -> Float = { 0f }) : VectorF {
-    init {assert(dim>0)}
-    override var x: Float  get() = this[0]
-        set(v) {
-            this[0] = v
-        }
-    override var y: Float  get() = this[1]
-        set(v) {
-            this[1] = v
-        }
-    override var z: Float  get() = this[2]
-        set(v) {
-            this[2] = v
-        }
-    override var w: Float  get() = this[3]
-        set(v) {
-            this[3] = v
-        }
-    val array: Array<Float> = Array(dim) { init(it) }
-    init {assert(array.size()>0)}
-    override val dimension: Int = array.size()
-
+open class ImmutableVectorF(override val dimension: Int, init: (Int) -> Float = { 0f }) : VectorF {
+    init {assert(dimension>0)}
+    protected val array: Array<Float> = Array(dimension) { init(it) }
+    override fun get(i: Int): Float = array[i]
 
     constructor(fa: Array<Float>) : this(fa.size(), { fa[it] }) {}
 
@@ -191,14 +178,12 @@ open class MutableVectorF(dim: Int, init: (Int) -> Float = { 0f }) : VectorF {
 
     constructor(iv: VectorF) : this(iv.dimension, {iv[it]}) {}
 
-    override fun get(i: Int): Float = array[i]
-    fun set(i: Int, f: Float) = array.set(i, f)
-    fun set(v: MutableVectorF) = assign(v)
-    fun assign(v: MutableVectorF)  {
-        assert(dimension==v.dimension)
-        for(i in 0..dimension-1) this[i] = v[i]
-    }
     override fun toArray(): Array<Float> = array.clone()
+
+    override fun hashCode(): Int = this().fold(0) { acc, c -> acc xor c.hashCode()}
+
+    override fun toString(): String = this().joinToString(",", "[", "]")
+
     override fun invoke(): Iterable<Float> = object : Iterable<Float> {
         override fun iterator(): Iterator<Float> = object: Iterator<Float> {
             var idx = -1
@@ -207,20 +192,29 @@ open class MutableVectorF(dim: Int, init: (Int) -> Float = { 0f }) : VectorF {
             override fun hasNext(): Boolean = idx+1<dimension
         }
     }
+}
+
+class MutableVectorF(dimension: Int, init: (Int) -> Float = { 0f }) : ImmutableVectorF(dimension, init) {
+    constructor(fa: Array<Float>) : this(fa.size(), { fa[it] }) {}
+
+    constructor(fi: Collection<Float>) : this(fi.size(), { fi.elementAt(it) }) {}
+
+    constructor(vararg fs: Number) : this(fs.size(), { fs[it].toFloat() }) {}
+
+    constructor(iv: VectorF) : this(iv.dimension, {iv[it]}) {}
+
+    fun set(i: Int, f: Float) = array.set(i, f)
+    fun set(v: MutableVectorF) = assign(v)
+    fun assign(v: MutableVectorF)  {
+        assert(dimension==v.dimension)
+        for(i in 0..dimension-1) this[i] = v[i]
+    }
 
     fun timesAssign(f: Float): Unit =array.forEachIndexed { i, fl -> array[i] *= fl }
     fun plusAssign(v: MutableVectorF) {assert(v.dimension==dimension); v().forEachIndexed { i, f -> this[i] += f }}
 
-    fun store(b:FloatBuffer) {
-        this().forEach { b.put(it) }
-    }
-
-    override fun hashCode(): Int = this().fold(0) { acc, c -> acc xor c.hashCode()}
-
-    override fun toString(): String = this().joinToString(",", "[", "]")
 
 
-    override fun immutable() : VectorF = object : VectorF by this {}
 }
 
 
@@ -377,6 +371,8 @@ trait Rectangle2D {
         }
         return Rectangle2D.create(MutableVectorF(0, 0, 0), MutableVectorF(0, 0, 0))
     }
+
+    fun scale(d:Float) = create(min-(max-min)*(d/2f), max+(max-min)*(d/2f))
 
     fun split() : Iterable<Rectangle2D> {
         val res = arrayListOf<Rectangle2D>()

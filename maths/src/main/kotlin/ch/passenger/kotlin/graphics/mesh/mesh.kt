@@ -6,6 +6,9 @@ import ch.passenger.kotlin.graphics.math.LineSegment
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.trees.Octree
+import ch.passenger.kotlin.graphics.util.logging.d
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.lang.ref.WeakReference
 import java.util.*
 
@@ -14,6 +17,7 @@ import java.util.*
  */
 
 trait Vertex<H,V,F> {
+    val log : Logger get() = LoggerFactory.getLogger(javaClass<Vertex<H,V,F>>())
     val id : Long
     val v: VectorF
     val data: V
@@ -43,6 +47,31 @@ trait Vertex<H,V,F> {
     override fun hashCode(): Int = v.hashCode()
 
     override fun toString(): String = "V$id($v)"
+
+    fun compare(f1:Float, f2:Float) : Int = comaprator.compare(f1, f2)
+    fun equals(f1:Float, f2:Float) : Boolean = comaprator.compare(f1, f2)==0
+
+    val comaprator:Comparator<Float> get() = object : Comparator<Float> {
+        fun ulps(a:Float, b:Float) : Int = Math.abs(java.lang.Float.floatToIntBits(b)-java.lang.Float.floatToIntBits(a))
+        val epsilon : Float get() {
+            val min = mesh.extent.min().min()!!
+            val max = mesh.extent.max().max()!!
+            val ulps = ulps(min, max)
+            val ae = Math.abs(max-min)/ulps
+            return if(ae==Float.NEGATIVE_INFINITY || ae==Float.POSITIVE_INFINITY) java.lang.Float.intBitsToFloat(
+                    java.lang.Float.floatToIntBits(Float.MIN_VALUE)-1
+            ) else ae*100
+        }
+        override fun compare(o1: Float?, o2: Float?): Int {
+            if(o1 == null) return -1
+            if(o2==null) return 1
+            if(o1.isNaN()) return -1
+            if(o2.isNaN())  return 1
+            log.d {"$o1 $o2 d: ${Math.abs(o1-o2)} epsilon: $epsilon"}
+            if(Math.abs(o1-o2)<=epsilon) return 0
+            return o1.compareTo(o2)
+        }
+    }
 }
 trait HalfEdge<H,V,F> {
     val origin : Vertex<H,V,F>
@@ -57,6 +86,7 @@ trait HalfEdge<H,V,F> {
         else return v
     }
     val cycle : Boolean get() = this().any{it.next==this}
+    val rim : Boolean get() = cycle && twin().all {it.twin in this} && this().all {it.twin in twin}
     var left:Face<H,V,F>
 
     val innerAngleRaw : Float get() {
@@ -77,7 +107,13 @@ trait HalfEdge<H,V,F> {
 
     val sumInnerAngles : Float get() = this().map { it.innerAngle }.sum()
     val piLaw : Float get() = if(!cycle) Float.NaN else ((this().count()-2)*Math.PI).toFloat()
-    val insideLooking : Boolean get() = sumInnerAngles==piLaw
+    val insideLooking : Boolean get() = origin.equals(sumInnerAngles,piLaw)
+    val dir : VectorF get() = destination.v-origin.v
+    val cross : VectorF get() = if(previous==NOEDGE) VectorF(origin.v.dimension) {Float.NaN} else previous.dir.cross(dir)
+    val sumCross : VectorF get() = if(!cycle) VectorF(origin.v.dimension) {Float.NaN} else
+        this().map { it.cross }.fold<VectorF,VectorF>(VectorF(origin.v.dimension) {0f}) {acc, it -> acc+it}
+
+    fun contains(e:HalfEdge<H,V,F>) : Boolean = this().any { it==e }
 
     override fun equals(other: Any?): Boolean = if(other is HalfEdge<*,*,*>) other.key==key else false
 
@@ -108,7 +144,7 @@ trait Face<H,V,F> {
     val id : Int
     val edge:HalfEdge<H,V,F>
     val data:F
-    val hole:Boolean get() = false
+    var hole:Boolean
     val infinity:Boolean get() = false
     val properFace: Boolean get() = this!=NOFACE && !hole && !infinity
 
@@ -131,8 +167,7 @@ trait Face<H,V,F> {
     open val NOFACE : Face<H,V,F>
 }
 
-class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), VectorF(1f,1f,1f)),
-                  val faceFactory:(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F) {
+class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F) {
     private var vids : Long = 0L
 
     val NOVERTEX = object : Vertex<H,V,F> {
@@ -185,25 +220,14 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
         override val edge: HalfEdge<H, V, F> get() = throw UnsupportedOperationException()
         override val data: F get() = throw UnsupportedOperationException()
         override val NOFACE: Face<H, V, F> get() = this
-        override val hole: Boolean get() = false
+        override var hole: Boolean get() = false
+            set(v) {}
         override val infinity: Boolean get() = false
         override val properFace: Boolean get() = false
         override val triangles: Iterable<Triangle> get() = emptyList()
 
         override fun equals(other: Any?): Boolean = identityEquals(other)
         override fun toString(): String = "NOFACE"
-    }
-
-    val HOLE = object : Face<H,V,F> {
-        override val parent: Face<H, V, F> get() = NOFACE
-        override var name: String = "HOLE"
-        override val id: Int get() = -2
-        override val edge: HalfEdge<H, V, F> get() = NOEDGE
-        override val data: F get() = throw UnsupportedOperationException()
-        override val hole: Boolean get() = true
-        override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
-        override val triangles: Iterable<Triangle> get() = emptyList()
-        override fun equals(other: Any?): Boolean = identityEquals(other)
     }
 
     val INFINITY = object : Face<H,V,F> {
@@ -213,6 +237,8 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
         override val edge: HalfEdge<H, V, F> get() = NOEDGE
         override val data: F get() = throw UnsupportedOperationException()
         override val infinity: Boolean get() = true
+        override var hole: Boolean get() = false
+            set(v) {}
         override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
         override val triangles: Iterable<Triangle> get() = emptyList()
         override fun equals(other: Any?): Boolean = identityEquals(other)
@@ -243,6 +269,7 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
             get() = if($name.isEmpty()) "$id" else $name
             set(v) {$name = v}
         override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
+        override var hole: Boolean=if(parent!=NOFACE) parent.hole else false
 
         init {
             edge().forEach { it.left=this }
@@ -263,6 +290,7 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
     private val medges:MutableMap<Pair<Vertex<H, V, F>,Vertex<H, V, F>>,HalfEdge<H, V, F>> = hashMapOf()
     private val mfaces:MutableMap<Int,Face<H, V, F>> = hashMapOf()
     private final val octree : Octree<H,V,F> = Octree(extent, 16)
+    val extent:AlignedCube get() = octree.extent
 
     private val vahandlers : MutableSet<(WeakReference<(Vertex<H, V, F>)->Unit>)> = hashSetOf()
     private val vrhandlers : MutableSet<(WeakReference<(Vertex<H, V, F>)->Unit>)> = hashSetOf()
@@ -328,7 +356,7 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
     }
 
     fun plus(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>, data:H, twin:H=data) : Mesh<H,V,F> {
-        if(v0==v1) throw IllegalArgumentException("null edge $v0=>$v1 not allowed")
+        if(v0==v1) throw IllegalArgumentException("zero length edge $v0=>$v1 not allowed")
         val key = v0 to v1
         if(key in medges) throw DuplicateElementException(medges[key]!!, "Duplicate Edge ${medges[key]}")
         createEdge(v0, v1, data, twin)
@@ -428,3 +456,77 @@ class Mesh<H,V,F>(val extent:AlignedCube = AlignedCube(VectorF(-1f, -1f, -1f), V
 
 open class MeshException(msg:String="", cause:Throwable?=null, suppress:Boolean=false, writable:Boolean=false) : Exception(msg, cause, suppress, writable)
 class DuplicateElementException(val element:Any, msg:String="", cause:Throwable?=null, suppress:Boolean=false, writable:Boolean=false) : MeshException(msg, cause, suppress, writable)
+
+class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
+    val log = LoggerFactory.getLogger(this.javaClass)
+    //cf http://geomalgorithms.com/a03-_inclusion.html
+    fun wn(v:Vertex<H,V,F>, e:HalfEdge<H,V,F>) : Int {
+        fun isLeft(v:Vertex<H,V,F>, e:HalfEdge<H,V,F>) : Int {
+            val p0 = e.origin.v; val p1 = e.destination.v
+            val p2 = v.v
+            val left = Math.signum((
+                    p1[X] - p0[X]) * (p2[Y] - p0[Y]) - (p2[X] - p0[X]) * (p1[Y] - p0[Y])
+            )
+            log.d{"isLeft: $v of $e"}
+            return left.toInt()
+        }
+        /*
+        if (V[i].y <= P.y) {          // start y <= P.y
+            if (V[i+1].y  > P.y)      // an upward crossing
+                 if (isLeft( V[i], V[i+1], P) > 0)  // P left of  edge
+                     ++wn;            // have  a valid up intersect
+        }
+        else {                        // start y > P.y (no test needed)
+            if (V[i+1].y  <= P.y)     // a downward crossing
+                 if (isLeft( V[i], V[i+1], P) < 0)  // P right of  edge
+                     --wn;            // have  a valid down intersect
+        }
+         */
+        var wn = 0
+        e().forEach {
+            val v1 = it.origin.v; val v2 = it.destination.v
+            val p = v.v
+            if(v1[Y]<=p[Y]) {
+                if(v2[Y]>p[Y]) {
+                    if(isLeft(v, it)>0) ++wn
+                }
+            } else {
+                if(v2[Y] <= p[Y]) {
+                    if(isLeft(v, it)<0) --wn
+                }
+            }
+        }
+        log.d {"wn $v -> $e"}
+        return wn
+    }
+
+    fun cycles() : Set<HalfEdge<H,V,F>> {
+        val cycles = hashSetOf<HalfEdge<H,V,F>>()
+        val done = hashSetOf<HalfEdge<H,V,F>>()
+        mesh.edges.forEach {
+            if(it !in done) {
+                if(it.cycle) cycles.add(it)
+                it().forEach { done add it }
+            }
+        }
+        return cycles
+    }
+
+    fun containment() : Map<HalfEdge<H,V,F>, Set<HalfEdge<H,V,F>>> {
+        val res : MutableMap<HalfEdge<H,V,F>, Set<HalfEdge<H,V,F>>> = hashMapOf()
+        val insides = cycles().filter { it.insideLooking }
+        insides.forEach {
+            candidate ->
+            insides.filter { it!=candidate }.forEach {
+                container ->
+                if(candidate().map { it.origin }.all { wn(it, container) != 0 }) {
+                    if(container !in res) res[container] = hashSetOf(candidate)
+                    else (res[container]!! as MutableSet) add candidate
+                }
+            }
+        }
+
+        return res
+    }
+
+}

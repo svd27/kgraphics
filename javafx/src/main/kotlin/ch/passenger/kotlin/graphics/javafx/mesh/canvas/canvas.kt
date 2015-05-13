@@ -12,6 +12,7 @@ import ch.passenger.kotlin.graphics.mesh.Vertex
 import ch.passenger.kotlin.graphics.javafx.util.*
 import ch.passenger.kotlin.graphics.mesh.Face
 import ch.passenger.kotlin.graphics.util.collections.RingBuffer
+import ch.passenger.kotlin.graphics.util.logging.d
 import javafx.application.Application
 import javafx.application.Platform
 import javafx.beans.property.*
@@ -69,8 +70,8 @@ fun GraphicsContext.line(ls:LineSegment) {
     line(ls.start, ls.end)
 }
 
-fun<H,V,F> GraphicsContext.line(e:HalfEdge<H,V,F>, px:Double) {
-    halfarrow(e.origin.v.p2d, e.destination.v.p2d, 10*px)
+fun<H,V,F> GraphicsContext.line(e:HalfEdge<H,V,F>) {
+    line(e.origin.v, e.destination.v)
 }
 
 fun GraphicsContext.moveTo(p:Point2D) {
@@ -145,6 +146,10 @@ fun GraphicsContext.fill(text:String, v:VectorF) {
 val VectorF.p2d : Point2D get() = Point2D(x.toDouble(), y.toDouble())
 val Point2D.vec : VectorF get() = VectorF(getX(), getY(), 0)
 
+trait EdgeHandler<H,V,F> {
+    fun draw(e:HalfEdge<H,V,F>, g:GraphicsContext)
+}
+
 
 class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexFactory:(VectorF)->V, val edgeFactory:(Vertex<H,V,F>, Vertex<H,V,F>)->H,
                           val kv:KClass<V>, val ke:KClass<H>, val kf:KClass<F>) : Canvas() {
@@ -152,7 +157,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
     enum class Modes {
         ADDVERTEX REMOVEVERTEX VIEW ADDEDGE
     }
-    var inverse : Affine
+    var inverse : Affine = Affine()
     val mode : ObjectProperty<Modes> = SimpleObjectProperty(Modes.VIEW)
     val markedVertices: ObservableList<Vertex<H, V, F>> = FXCollections.observableArrayList()
     val markedEdges: ObservableList<HalfEdge<H, V, F>> = FXCollections.observableArrayList()
@@ -170,21 +175,25 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
 
     val vertexWalker = VertexWalker(this)
     val triangleWalker = TriangleWalker(this)
+    val edgeHandlers : MutableMap<HalfEdge<H,V,F>,EdgeHandler<H,V,F>> = hashMapOf()
+    val drawEdgeHandles : BooleanProperty = SimpleBooleanProperty(true)
 
     init {
         setFocusTraversable(true)
+        /*
         val r2d = Rectangle2D.create(base(mesh.extent.min), base(mesh.extent.max))
         setWidth(r2d.w.toDouble());setHeight(r2d.h.toDouble())
         val tcenter = MatrixF.translate(VectorF(getWidth() / 2, getHeight() / 2, 0, 1))
         val tzoom = MatrixF.scale(VectorF(zoom.get(), zoom.get(), zoom.get()))
         val complete = (base * tcenter * tzoom)
         getGraphicsContext2D().transform(complete.toFXAffine())
-        inverse = getGraphicsContext2D().getTransform().createInverse()
+                inverse = getGraphicsContext2D().getTransform().createInverse()
+                */
+        initTransform()
         zoom.addListener { ov, no, nn ->
             initTransform(); dirty()
         }
         fromEvents(ZoomEvent.ZOOM).subscribe {
-            log.debug("zoom t: ${it.getTotalZoomFactor()} z: ${it.getZoomFactor()}")
             zoom.set(it.getTotalZoomFactor())
         }
 
@@ -212,14 +221,15 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
 
             }
             val tp = inverse.transform(it.getX(), it.getY())
-            log.debug("MM $tp")
             currentMouseTransformedX.set(tp.getX())
             currentMouseTransformedY.set(tp.getY())
             currentMouseX.set(it.getX())
             currentMouseY.set(it.getY())
             val tpv = tp.vec
-            val hotzone = AlignedCube.around(tpv, hotzone.getValue().toFloat()*px.toFloat())
+            //val hotzone = AlignedCube.around(tpv, hotzone.getValue().toFloat()*px.toFloat())
+            val hotzone = hotzone(tpv)
             val res = mesh.find(hotzone)
+            log.trace("MM HZ: ${hotzone} v: ${res.vertices.count()} e: ${res.edges.count()}")
             transientMarksV.addAll(res.vertices)
             transientMarksE.addAll(res.edges)
             transientMarksF.addAll(res.faces)
@@ -230,11 +240,13 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
         }
 
 
+
+
         this.setOnMouseClicked {
             requestFocus()
             when(mode.get()) {
                 Modes.VIEW -> {
-                    val hotzone = AlignedCube.around(tpos, hotzone.getValue().toFloat()*px.toFloat())
+                    val hotzone = hotzone(tpos)
                     val e = mesh.findEdges(hotzone)
                     if(e.count()>0) {
                         focus.setValue(e.sortBy{VectorF.distance(tpos, it.origin.v)}.first())
@@ -249,7 +261,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
                 Modes.ADDEDGE -> {
                     if(it.getButton()== MouseButton.SECONDARY) vbuffer.clear()
                     else {
-                        val hotzone = AlignedCube.around(tpos, hotzone.getValue().toFloat() * px.toFloat())
+                        val hotzone = hotzone(tpos)
                         val vs = mesh.findVertices(hotzone)
                         if (vs.count() > 0) {
                             vbuffer.push(vs.first())
@@ -325,18 +337,30 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
         dirty()
     }
 
+    fun hotzone(v:VectorF) : AlignedCube {
+        val w = VectorF(3) {if(it<2) hotzone.getValue().toFloat()*px.toFloat()/2 else 0f}
+        return  AlignedCube(v-w, v+w)
+    }
+
     fun initTransform() {
         val r2d = Rectangle2D.create(base(mesh.extent.min)*zoom.get().toFloat(), base(mesh.extent.max)*zoom.get().toFloat())
         setWidth(r2d.w.toDouble());setHeight(r2d.h.toDouble())
-        log.debug("${zoom.get()}: ${getWidth()}x${getHeight()}")
-        val tcenter = MatrixF.translate(VectorF(getWidth() / 2, getHeight() / 2, 0, 1))
+        log.trace("${zoom.get()}: ${getWidth()}x${getHeight()}")
         val tzoom = MatrixF.scale(zoom.get().toFloat())
-        val complete = (base * tzoom * tcenter)
-        log.debug("complete: $complete")
+        val tzero = MatrixF.translate(mesh.extent.min)
+        val scale = tzero * base * tzoom
+        val tmin = scale(mesh.extent.min); val tmax = scale(mesh.extent.max)
+        val tr = Rectangle2D.create(tmin, tmax).scale(.1f)
+        setWidth(tr.w.toDouble());setHeight(tr.h.toDouble())
+        log.d{"${mesh.extent.min}x${mesh.extent.max} -> ${tmin}x$tmax"}
+        log.d{"canvas wxh ${getWidth()}x${getHeight()}"}
+        //VectorF(getWidth() / 2, getHeight() / 2, 0, 1)
+        val tcenter = MatrixF.translate(-(tmin-tmax)*.05f-tmin)
+        val complete = (scale * tcenter)
         getGraphicsContext2D().setTransform(complete.toFXAffine())
+
         inverse = getGraphicsContext2D().getTransform().createInverse()
-        log.debug("nt: ${getGraphicsContext2D().getTransform()}")
-        log.debug("ni: $inverse")
+        dirty()
     }
 
     var dirty:Boolean = false
@@ -375,15 +399,14 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
         g.save()
         val px = (mesh.extent.max.x-mesh.extent.min.x)/getWidth()
         g.setFont(Font.font(16*px))
-
-        g.clear(mesh.extent.min, mesh.extent.max)
+        g.save(); g.setTransform(Affine()); g.clearRect(0.0, 0.0, getWidth(), getHeight()); g.restore()
         g.setStroke(Color.DARKSLATEGRAY)
         g.setLineWidth(px)
         g.line(mesh.extent.min.x, 0f, mesh.extent.max.x, 0f)
         g.line(0f, mesh.extent.min.y, 0f, mesh.extent.max.y)
         g.setStroke(Color.BLACK)
         mesh.edges.forEach {
-            g.line(it, px)
+            draw(it, g)
         }
         g.setStroke(Color.DODGERBLUE)
         markedVertices.forEach { g.strokeOval(it.v.x.toDouble()-2.5*px, it.v.y.toDouble()-2.5*px, 5*px, 5*px) }
@@ -391,7 +414,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
             g.save()
             g.setLineWidth(2*px)
             g.setStroke(Color.DODGERBLUE)
-            g.line(it, px)
+            draw(it, g)
         }
         markedFaces.forEach { g.save();
             val p : Paint = Color.DODGERBLUE.deriveColor(0.0, 1.0, 1.0, .5)
@@ -407,7 +430,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
         transientMarksV.clear()
         transientMarksE.forEach {
             g.setLineWidth(2*px)
-            g.line(it, px)
+            draw(it, g)
             g.setLineWidth(px)
             if(lblangles.get()) {
                 g.fill("%.2f".format(it.innerAngle), it.origin.v)
@@ -418,24 +441,41 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
             }
         }
         transientMarksE.clear()
-        transientMarksF.forEach { g.fill(it) }
+        //transientMarksF.forEach { g.fill(it) }
         transientMarksF.clear()
         if(focus.get()!=mesh.NOEDGE) {
             g.setLineWidth(3*px)
             g.setStroke(Color.FORESTGREEN)
-            g.line(focus.get(), px)
-            val it = focus.get()
+            val fe = focus.get()
+            draw(fe, g)
             g.setLineWidth(px)
             if(lblangles.get()) {
-                g.fill("%.2f".format(it.innerAngle), it.origin.v)
+                g.fill("%.2f".format(fe.innerAngle), fe.origin.v)
             }
             if(lblvertices.get()) {
-                g.fill("${it.origin.id}", it.origin.v)
-                g.fill("${it.destination.id}", it.destination.v)
+                g.fill("${fe.origin.id}", fe.origin.v)
+                g.fill("${fe.destination.id}", fe.destination.v)
             }
         }
         g.restore()
         dirty = false
+    }
+
+    fun draw(e:HalfEdge<H,V,F>, g:GraphicsContext) {
+        if(e in edgeHandlers || e.twin in edgeHandlers) {
+            if(e in edgeHandlers) edgeHandlers[e]!!.draw(e, g)
+        } else {
+            if(drawEdgeHandles.get()) {
+                g.halfarrow(e.origin.v.p2d, e.destination.v.p2d, 8*px)
+            } else {
+                g.line(e)
+            }
+        }
+        if(e !in edgeHandlers && e.twin !in edgeHandlers) {
+
+        } else {
+
+        }
     }
 }
 
