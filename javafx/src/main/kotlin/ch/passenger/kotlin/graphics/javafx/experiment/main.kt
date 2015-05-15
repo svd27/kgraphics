@@ -6,10 +6,7 @@ import ch.passenger.kotlin.graphics.javafx.mesh.components.*
 import ch.passenger.kotlin.graphics.javafx.svg.SVGFontViewer
 import ch.passenger.kotlin.graphics.math.MatrixF
 import ch.passenger.kotlin.graphics.math.VectorF
-import ch.passenger.kotlin.graphics.mesh.Face
-import ch.passenger.kotlin.graphics.mesh.HalfEdge
-import ch.passenger.kotlin.graphics.mesh.Mesh
-import ch.passenger.kotlin.graphics.mesh.Vertex
+import ch.passenger.kotlin.graphics.mesh.*
 import ch.passenger.kotlin.graphics.util.collections.RingBuffer
 import ch.passenger.kotlin.graphics.util.svg.font.FontawesomeNameMapper
 import ch.passenger.kotlin.graphics.util.svg.font.SVGFont
@@ -40,9 +37,11 @@ import java.io.InputStreamReader
  */
 class FXMain() : Application() {
     val vertexBuffer : RingBuffer<Vertex<Unit,Unit,Unit>> = RingBuffer(2)
-    val m = Mesh<Unit,Unit,Unit>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), { left, parent ->  })
-    val canvas = FXMeshCanvas(m, MatrixF.scale(VectorF(500, 500, 500, 1)), {}, {v0, v1 ->},
-            Unit::class, Unit::class, Unit::class )
+
+    val m = Mesh<Unit,Unit,Unit>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), MeshDataFactory.from(Unit,
+            {  },{ p, p1 ->  }, { e, p ->  })
+    )
+    val canvas = FXMeshCanvas(m, 500.0, Unit::class, Unit::class, Unit::class )
     override fun start(primaryStage: Stage) {
         val status = bottom()
         val sp = ScrollPane(canvas)

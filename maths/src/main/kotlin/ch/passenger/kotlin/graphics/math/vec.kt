@@ -1,6 +1,10 @@
 package ch.passenger.kotlin.graphics.math
 
 import ch.passenger.kotlin.graphics.util.*
+import ch.passenger.kotlin.graphics.util.logging.d
+import ch.passenger.kotlin.graphics.util.logging.t
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.nio.FloatBuffer
 import javax.xml.XMLConstants
 import javax.xml.stream.XMLStreamConstants
@@ -39,6 +43,7 @@ trait VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
     fun plus(v: VectorF): VectorF = VectorF(dimension) { this[it] + v[it] }
     fun plus(f: Float): VectorF = VectorF(dimension) { this[it] + f }
     fun minus(v: VectorF): VectorF = VectorF(dimension) { this[it] - v[it] }
+    fun minus(f: Float): VectorF = VectorF(dimension) { this[it] - f }
     fun magnitude(): Float = this().map { it * it }.foldRight(0f) { l, r -> l + r }.sqrt()
     fun times(v: VectorF): Float = this().merge(v()) { f1, f2 -> f1 * f2 }.foldRight(0f) { acc, c -> acc + c }
     fun times(m:MatrixF) : MatrixF {
@@ -291,11 +296,18 @@ fun rayIntersect(O: VectorF, dir: VectorF, la : VectorF, lb: VectorF) : Intersec
 
 
 trait LineSegment {
+    val log : Logger get() = LoggerFactory.getLogger(this.javaClass)
     val start: VectorF; val end: VectorF
     val dir : VectorF get() = end-start
     fun at(t:Float): VectorF = start + dir*t
 
-    fun intersects2D(line:LineSegment) : Intersection {
+    fun intersects2D(line:LineSegment, filter:(LineSegment,LineSegment,Intersection)->Boolean = {l,l1,i->true}) : Boolean {
+        val inter = intersection2D(line)
+        log.t {"$this || $line $inter"}
+        return inter.type in setOf(IntersectionType.INTERSECT, IntersectionType.COINCIDENT) && inter.tsegment in 0f..1f && inter.tray in 0f..1f
+        && filter(this, line, inter)
+    }
+    fun intersection2D(line:LineSegment) : Intersection {
         val la = line.start; val lb = line.end
         val a = start; val b=end
         val denom = (lb.y - la.y) * (b.x - a.x) - (lb.x - la.x) * (b.y - a.y);
@@ -329,6 +341,7 @@ trait LineSegment {
         fun create(v0: VectorF,v1: VectorF) : LineSegment = object : LineSegment {
             override val start: VectorF = v0
             override val end: VectorF = v1
+            override fun toString(): String = super<LineSegment>.toString()
         }
     }
 }
@@ -345,7 +358,7 @@ trait Rectangle2D {
     fun contains(r:Rectangle2D) : Boolean = r.min in this && r.max in this
     fun intersects(r:Rectangle2D) : Boolean = min in r || max in r
     fun crossedBy(l:LineSegment) : Boolean = l.start in this || l.end in this || borders.any {
-        val i = l.intersects2D(it)
+        val i = l.intersection2D(it)
         i.type in setOf(IntersectionType.INTERSECT, IntersectionType.COINCIDENT) && i.tsegment in 0f..1f && i.tray in 0f..1f
     }
     override fun equals(other: Any?): Boolean = if(other is Rectangle2D) other.min==min && other.max==max else false
@@ -385,16 +398,17 @@ trait Rectangle2D {
     }
 
     val borders : Iterable<LineSegment> get() = listOf(
-            LineSegment.create(min, MutableVectorF(max.x, min.y, 0)),
-            LineSegment.create(min, MutableVectorF(min.x, max.y, 0)),
-            LineSegment.create(MutableVectorF(max.x, min.y, 0), max),
-            LineSegment.create(MutableVectorF(min.x, max.y, 0), max)
+            LineSegment.create(min, VectorF(max.x, min.y, 0)),
+            LineSegment.create(min, VectorF(min.x, max.y, 0)),
+            LineSegment.create(VectorF(max.x, min.y, 0), max),
+            LineSegment.create(VectorF(min.x, max.y, 0), max)
     )
 
     override fun toString(): String = "(${min.x}, ${min.y} - ${(max-min).x}x${(max-min).y})"
 
     companion object o {
         fun create(min: VectorF, max: VectorF) : Rectangle2D = ARectangle2D(min, max)
+        fun around(c:VectorF, h:Float) : Rectangle2D = ARectangle2D(c-h/2, c+h/2)
         private class ARectangle2D(override val min: VectorF, override val max: VectorF) : Rectangle2D
     }
 }

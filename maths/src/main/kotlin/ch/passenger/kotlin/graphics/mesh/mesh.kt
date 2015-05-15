@@ -7,6 +7,8 @@ import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.trees.Octree
 import ch.passenger.kotlin.graphics.util.logging.d
+import ch.passenger.kotlin.graphics.util.logging.e
+import ch.passenger.kotlin.graphics.util.logging.t
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.ref.WeakReference
@@ -48,10 +50,12 @@ trait Vertex<H,V,F> {
 
     override fun toString(): String = "V$id($v)"
 
-    fun compare(f1:Float, f2:Float) : Int = comaprator.compare(f1, f2)
-    fun equals(f1:Float, f2:Float) : Boolean = comaprator.compare(f1, f2)==0
+    fun compare(f1:Float, f2:Float) : Int = comparator.compare(f1, f2)
+    fun equals(f1:Float, f2:Float) : Boolean = comparator.compare(f1, f2)==0
+    fun equals(v1:VectorF, v2:VectorF) : Boolean = if(v1.dimension!=v2.dimension) false else v1().zip(v2()).all{equals(it.first, it.second)}
+    fun equals(v1:Vertex<H,V,F>, v2:Vertex<H,V,F>) :Boolean = equals(v1.v, v2.v)
 
-    val comaprator:Comparator<Float> get() = object : Comparator<Float> {
+    val comparator:Comparator<Float> get() = object : Comparator<Float> {
         fun ulps(a:Float, b:Float) : Int = Math.abs(java.lang.Float.floatToIntBits(b)-java.lang.Float.floatToIntBits(a))
         val epsilon : Float get() {
             val min = mesh.extent.min().min()!!
@@ -67,7 +71,7 @@ trait Vertex<H,V,F> {
             if(o2==null) return 1
             if(o1.isNaN()) return -1
             if(o2.isNaN())  return 1
-            log.d {"$o1 $o2 d: ${Math.abs(o1-o2)} epsilon: $epsilon"}
+            log.t {"$o1 $o2 d: ${Math.abs(o1-o2)} epsilon: $epsilon"}
             if(Math.abs(o1-o2)<=epsilon) return 0
             return o1.compareTo(o2)
         }
@@ -99,21 +103,44 @@ trait HalfEdge<H,V,F> {
             return ang.toFloat()
     }
 
+    val outerAngleRaw : Float get() {
+        if(this==NOEDGE || previous==NOEDGE) return Float.NaN
+        val a = origin.v
+        val b = twin.origin.v
+        val c = previous.origin.v
+        val v1 = (b-a); val v2 = (c-a)
+        var ang = Math.atan2(v2.y.toDouble(),v2.x.toDouble()) - Math.atan2(v1.y.toDouble(),v1.x.toDouble())
+        return ang.toFloat()
+    }
+
     val innerAngle : Float get() {
         var ang = innerAngleRaw
         if(ang<0) ang += (2*Math.PI).toFloat()
         return ang.toFloat()
     }
 
+    val outerAngle : Float get() {
+        var ang = outerAngleRaw
+        if(ang<0) ang += (2*Math.PI).toFloat()
+        return ang.toFloat()
+    }
+
     val sumInnerAngles : Float get() = this().map { it.innerAngle }.sum()
+    val sumOuterAngles : Float get() = this().map { it.outerAngle }.sum()
     val piLaw : Float get() = if(!cycle) Float.NaN else ((this().count()-2)*Math.PI).toFloat()
-    val insideLooking : Boolean get() = origin.equals(sumInnerAngles,piLaw)
+    val insideLooking: Boolean get() =
+    if (!cycle) false
+    else if (!origin.equals(sumInnerAngles, piLaw) && !origin.equals(sumOuterAngles, piLaw))
+        sumCross.z < 0f
+    else origin.equals(sumInnerAngles, piLaw)
+
     val dir : VectorF get() = destination.v-origin.v
     val cross : VectorF get() = if(previous==NOEDGE) VectorF(origin.v.dimension) {Float.NaN} else previous.dir.cross(dir)
     val sumCross : VectorF get() = if(!cycle) VectorF(origin.v.dimension) {Float.NaN} else
         this().map { it.cross }.fold<VectorF,VectorF>(VectorF(origin.v.dimension) {0f}) {acc, it -> acc+it}
 
     fun contains(e:HalfEdge<H,V,F>) : Boolean = this().any { it==e }
+    fun contains(v:Vertex<H,V,F>) : Boolean = this().any { it.origin==v }
 
     override fun equals(other: Any?): Boolean = if(other is HalfEdge<*,*,*>) other.key==key else false
 
@@ -122,7 +149,8 @@ trait HalfEdge<H,V,F> {
     override fun toString(): String = "${origin.id}->${destination.id}"
 
     val NOEDGE : HalfEdge<H,V,F>
-    fun invoke() : Iterable<HalfEdge<H,V,F>> = object : Iterable<HalfEdge<H,V,F>> {
+    /*
+        fun invoke() : Iterable<HalfEdge<H,V,F>> = object : Iterable<HalfEdge<H,V,F>> {
         override fun iterator(): Iterator<HalfEdge<H, V, F>> = object: Iterator<HalfEdge<H, V, F>> {
             var current : HalfEdge<H,V,F>? = null
             override fun hasNext(): Boolean = current!=NOEDGE && current!=this@HalfEdge
@@ -135,6 +163,19 @@ trait HalfEdge<H,V,F> {
             }
         }
     }
+
+     */
+    //TODO: check upper is correct impl
+    fun invoke() : Iterable<HalfEdge<H,V,F>> {
+        val res = arrayListOf(this)
+        var c = this.next
+        while(c!=NOEDGE && c!=this@HalfEdge) {
+            res.add(c)
+            c = c.next
+        }
+        return res
+    }
+
     val line:LineSegment get() = LineSegment.create(origin.v, destination.v)
 }
 
@@ -146,7 +187,7 @@ trait Face<H,V,F> {
     val data:F
     var hole:Boolean
     val infinity:Boolean get() = false
-    val properFace: Boolean get() = this!=NOFACE && !hole && !infinity
+    val properFace: Boolean get() = this!=NOFACE  && !infinity
 
     /**
      * return a list of tringales fully contained in this face
@@ -163,11 +204,33 @@ trait Face<H,V,F> {
 
     override fun hashCode(): Int = id.hashCode()
 
-    override fun toString(): String = "F$name($edge)"
+    override fun toString(): String = "F${if(hole)":h:"else""}$name($edge)"
     open val NOFACE : Face<H,V,F>
 }
 
-class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F) {
+trait MeshDataFactory<H,V,F,C> {
+    val context : C
+    val faceFactory:Mesh<H,V,F>.(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F
+    val edgeFactory:Mesh<H,V,F>.(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>)->H
+    val vertexFactory:Mesh<H,V,F>.(v:VectorF)->V
+
+    companion object {
+        fun<H,V,F,C> from(c:C, vf:Mesh<H,V,F>.(v:VectorF)->V, ef:Mesh<H,V,F>.(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>)->H,
+                        ff:Mesh<H,V,F>.(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F) : MeshDataFactory<H,V,F,C> = object: MeshDataFactory<H, V, F,C> {
+            override val context: C
+                get() = c
+            override val edgeFactory: Mesh<H,V,F>.(Vertex<H, V, F>, Vertex<H, V, F>) -> H
+                get() = ef
+            override val vertexFactory: Mesh<H,V,F>.(VectorF) -> V
+                get() = vf
+            override val faceFactory: Mesh<H,V,F>.(HalfEdge<H, V, F>, Face<H, V, F>) -> F
+                get() = ff
+        }
+    }
+}
+
+class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V,F,*>) {
+    protected val log : Logger = LoggerFactory.getLogger(this.javaClass)
     private var vids : Long = 0L
 
     val NOVERTEX = object : Vertex<H,V,F> {
@@ -257,8 +320,8 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
     private inner class MEdge(override val origin: Vertex<H, V, F>, override val data: H) : HalfEdge<H,V,F> {
         var _twin : HalfEdge<H, V, F>? = null
         override val twin: HalfEdge<H, V, F> get() = _twin!!
-
         override var next: HalfEdge<H, V, F> = NOEDGE
+        set(v) {assert(v!=this && _twin!=null && (v==NOEDGE || v!=twin)); $next = v}
         override var left: Face<H, V, F> = NOFACE
 
         override val NOEDGE: HalfEdge<H, V, F> get() = this@Mesh.NOEDGE
@@ -338,15 +401,32 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
         frhandlers.forEach { if(it.get()!=null) it.get()(v) else frhandlers.remove(it) }
     }
 
-    fun add(vec:VectorF, data:V) : Vertex<H,V,F> {
+    fun add(vec:VectorF) : Vertex<H,V,F> {
         val vd = octree.vat(vec)
         if(vd !=null) throw DuplicateElementException(vd, "Duplicate Vertex $vd")
-        val v = MVertex(data, vec)
+        val v = MVertex(dataFactory.vertexFactory(vec), vec)
         mvertices[v.id] = v
         octree + v
         handleVertexAdd(v)
         return v
     }
+
+    fun add(vec:VectorF, tolerance:Float) : Vertex<H,V,F> {
+        val c = AlignedCube.around(vec, tolerance/2f)
+        val vd = octree.findVertices(c)
+
+        if(vd.count()==0) {
+            val v =  MVertex(dataFactory.vertexFactory(vec), vec)
+            mvertices[v.id] = v
+            octree + v
+            handleVertexAdd(v)
+            return v
+        }
+
+        return  vd.sortBy {VectorF.distance(vec, it.v)}.first()
+    }
+
+
 
     fun minus(v:Vertex<H,V,F>)  {
         if(!v.isolated) throw IllegalStateException("$v still points to ${v.leaving}")
@@ -355,13 +435,20 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
         vrhandlers.forEach { it.get()(v) }
     }
 
-    fun plus(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>, data:H, twin:H=data) : Mesh<H,V,F> {
-        if(v0==v1) throw IllegalArgumentException("zero length edge $v0=>$v1 not allowed")
+    fun add(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>) : HalfEdge<H,V,F> {
+        if(v0==v1) {
+            val err = IllegalArgumentException("zero length edge $v0=>$v1 not allowed")
+            log.e(err)
+            throw err
+        }
         val key = v0 to v1
-        if(key in medges) throw DuplicateElementException(medges[key]!!, "Duplicate Edge ${medges[key]}")
-        createEdge(v0, v1, data, twin)
+        if(key in medges) {
+            val err = DuplicateElementException(medges[key]!!, "Duplicate Edge ${medges[key]}")
+            log.e(err)
+            throw err
+        }
 
-        return this
+        return createEdge(v0, v1, dataFactory.edgeFactory(v0, v1), dataFactory.edgeFactory(v1, v0))
     }
 
     private fun createEdge(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>, data:H, datatwin:H) : HalfEdge<H,V,F> {
@@ -388,16 +475,40 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
         return e
     }
 
+    fun bridge(e1:HalfEdge<H,V,F>, e2:HalfEdge<H,V,F>) : HalfEdge<H,V,F> {
+        val v0 = e1.destination; val v1 = e2.origin
+        val e = MEdge(v0, dataFactory.edgeFactory(v0, v1))
+        val twin = MEdge(v1, dataFactory.edgeFactory(v1, v0))
+        e._twin = twin
+        twin._twin = e
+        medges[e.key] = e
+        medges[twin.key] = twin
+        octree + e
+        octree + twin
+
+        if(v0.leaving==NOEDGE) v0.leaving=e
+        if(v1.leaving==NOEDGE) v1.leaving=twin
+        twin.next=e1.next
+        e2.previous.next = twin
+        e1.next = e
+        e.next=e2
+        if(e.cycle && e.insideLooking) linkFace(e, e2.left)
+        if(twin.cycle && twin.insideLooking) linkFace(twin, twin.next.left)
+        return e
+    }
+
     fun unlinkFace(f:Face<H,V,F>) {
         f.edge().forEach { it.left=NOFACE }
         mfaces.remove(f.id)
+        assert(f.id !in mfaces && f.id !in mfaces.keySet() && f !in mfaces.values())
         octree - f
         handleFaceRemove(f)
     }
 
-    fun linkFace(e:HalfEdge<H,V,F>, p:Face<H,V,F>, n:String="") {
-        val f = MFace(p, e, faceFactory(e, p), n)
-        mfaces[f.id] = f
+    fun linkFace(e:HalfEdge<H,V,F>, p:Face<H,V,F>, n:String="") : Face<H,V,F> {
+        log.d{"linking face: $e cycle: ${e.cycle} inside: ${e.insideLooking} tins: ${e.twin.insideLooking}"}
+        if(!e.cycle || !e.insideLooking) return NOFACE
+        return MFace(p, e, dataFactory.faceFactory(e, p), n)
     }
 
     fun landingAt(e:HalfEdge<H,V,F>) {
@@ -410,9 +521,11 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
         val next = e.destination().filter { it!=e.twin && it!=NOEDGE }.sortBy {VectorF.angle3p(e.origin.v, e.destination.v, it.destination.v)}.firstOrNull()
         if(next!=null) {
             if(next.cycle) {
+                if(e.origin in next)
                 return split(e, next)
+                //else return bridge(e, next)
             }
-            if(next.left.properFace) throw IllegalStateException()
+
             val np = next.previous
             e.next = next
             if(np!=NOEDGE) np.next=e.twin
@@ -425,10 +538,8 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
             prev.next = e
         }
         if(e.cycle && e.insideLooking && !e.left.properFace) {
-            linkFace(e, NOFACE)
-        }
-        if(e.twin.cycle && e.twin.insideLooking && !e.twin.left.properFace) {
-            linkFace(e.twin, NOFACE)
+            if(next!=null && next.left!=null && next.left.properFace) unlinkFace(next.left)
+            linkFace(e, next?.left?:NOFACE)
         }
     }
 
@@ -436,19 +547,62 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
         val prev = sp().first { it.destination==e.origin }
         val twnext = prev.next
         val twprev = sp.previous
-        val parent = if(sp.left.properFace) sp.left else NOFACE
+        val parent = sp.left
+        val tparent = twnext.left
         prev.next = e
         e.next = sp
         e.twin.next = twnext
         twprev.next = e.twin
         if(parent.properFace) unlinkFace(parent)
+        if(e.cycle && e.insideLooking && !e.left.properFace)
         linkFace(e, parent, "SPLIT(${if(parent.properFace)parent.name else ""}, ${e.origin.id}->${e.destination.id})")
+        if(e.twin.cycle && e.twin.insideLooking && !e.twin.left.properFace)
         linkFace(e.twin, parent, "SPLIT(${if(parent.properFace)parent.name else ""}, ${e.twin.origin.id}->${e.twin.destination.id})")
     }
 
-    val edges:Iterable<HalfEdge<H,V,F>> = medges.values()
-    val vertices:Iterable<Vertex<H,V,F>> = mvertices.values()
-    val faces:Iterable<Face<H,V,F>> = mfaces.values()
+    fun gap(e:HalfEdge<H,V,F>, sp:HalfEdge<H,V,F>) {
+        val prev = e.origin().filter { it!=e.twin && it!=NOEDGE && it!=this }.map{it.twin}.
+                sortBy {VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v)}.firstOrNull()
+        if(prev!=null) {
+            if(prev.next!=NOEDGE) e.twin.next = prev.next
+            prev.next = e
+        }
+
+        val twprev = sp.previous
+        val parent = sp.left
+        e.next = sp
+        twprev.next = e.twin
+        if(parent.properFace) {
+            log.d{"bridge replace $parent"}
+            unlinkFace(parent)
+        }
+        if(e.cycle && !e.left.properFace && e.insideLooking) {
+            log.d{"linking $e with parent $parent"}
+            linkFace(e, parent, "BRIDGE(${if (parent.properFace) parent.name else ""}, ${e.origin.id}->${e.destination.id})")
+        }
+        if(e.twin.left!=e.left && e.twin.cycle && !e.twin.left.properFace && e.twin.insideLooking) {
+            log.d{"linking ${e.twin} with parent ${prev?.left}"}
+            linkFace(e.twin, prev?.left?:NOFACE, "BRIDGE(${if(parent.properFace)parent.name else ""}, ${e.twin.origin.id}->${e.twin.destination.id})")
+        }
+    }
+
+
+
+    fun cycles(filter:(HalfEdge<H,V,F>)->Boolean) : Set<HalfEdge<H,V,F>> {
+        val all = hashSetOf<HalfEdge<H,V,F>>()
+        edges.forEach { all add it }
+        val res = hashSetOf<HalfEdge<H,V,F>>()
+        while(all.size()>0) {
+            val e = all.first()
+            if(e.cycle && filter(e)) res add e
+            e().forEach { all.remove(it) }
+        }
+        return res
+    }
+
+    val edges:Iterable<HalfEdge<H,V,F>> get() = medges.values()
+    val vertices:Iterable<Vertex<H,V,F>> get() = mvertices.values()
+    val faces:Iterable<Face<H,V,F>> get() = mfaces.values()
     fun find(hotzone:AlignedCube) : Octree.Result<H,V,F> = octree.find(hotzone)
     fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = octree.findEdges(hotzone)
     fun findVertices(hotzone:AlignedCube) : Iterable<Vertex<H,V,F>> = octree.findVertices(hotzone)
@@ -457,76 +611,3 @@ class Mesh<H,V,F>(extent:AlignedCube, val faceFactory:(e:HalfEdge<H,V,F>,parent:
 open class MeshException(msg:String="", cause:Throwable?=null, suppress:Boolean=false, writable:Boolean=false) : Exception(msg, cause, suppress, writable)
 class DuplicateElementException(val element:Any, msg:String="", cause:Throwable?=null, suppress:Boolean=false, writable:Boolean=false) : MeshException(msg, cause, suppress, writable)
 
-class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
-    val log = LoggerFactory.getLogger(this.javaClass)
-    //cf http://geomalgorithms.com/a03-_inclusion.html
-    fun wn(v:Vertex<H,V,F>, e:HalfEdge<H,V,F>) : Int {
-        fun isLeft(v:Vertex<H,V,F>, e:HalfEdge<H,V,F>) : Int {
-            val p0 = e.origin.v; val p1 = e.destination.v
-            val p2 = v.v
-            val left = Math.signum((
-                    p1[X] - p0[X]) * (p2[Y] - p0[Y]) - (p2[X] - p0[X]) * (p1[Y] - p0[Y])
-            )
-            log.d{"isLeft: $v of $e"}
-            return left.toInt()
-        }
-        /*
-        if (V[i].y <= P.y) {          // start y <= P.y
-            if (V[i+1].y  > P.y)      // an upward crossing
-                 if (isLeft( V[i], V[i+1], P) > 0)  // P left of  edge
-                     ++wn;            // have  a valid up intersect
-        }
-        else {                        // start y > P.y (no test needed)
-            if (V[i+1].y  <= P.y)     // a downward crossing
-                 if (isLeft( V[i], V[i+1], P) < 0)  // P right of  edge
-                     --wn;            // have  a valid down intersect
-        }
-         */
-        var wn = 0
-        e().forEach {
-            val v1 = it.origin.v; val v2 = it.destination.v
-            val p = v.v
-            if(v1[Y]<=p[Y]) {
-                if(v2[Y]>p[Y]) {
-                    if(isLeft(v, it)>0) ++wn
-                }
-            } else {
-                if(v2[Y] <= p[Y]) {
-                    if(isLeft(v, it)<0) --wn
-                }
-            }
-        }
-        log.d {"wn $v -> $e"}
-        return wn
-    }
-
-    fun cycles() : Set<HalfEdge<H,V,F>> {
-        val cycles = hashSetOf<HalfEdge<H,V,F>>()
-        val done = hashSetOf<HalfEdge<H,V,F>>()
-        mesh.edges.forEach {
-            if(it !in done) {
-                if(it.cycle) cycles.add(it)
-                it().forEach { done add it }
-            }
-        }
-        return cycles
-    }
-
-    fun containment() : Map<HalfEdge<H,V,F>, Set<HalfEdge<H,V,F>>> {
-        val res : MutableMap<HalfEdge<H,V,F>, Set<HalfEdge<H,V,F>>> = hashMapOf()
-        val insides = cycles().filter { it.insideLooking }
-        insides.forEach {
-            candidate ->
-            insides.filter { it!=candidate }.forEach {
-                container ->
-                if(candidate().map { it.origin }.all { wn(it, container) != 0 }) {
-                    if(container !in res) res[container] = hashSetOf(candidate)
-                    else (res[container]!! as MutableSet) add candidate
-                }
-            }
-        }
-
-        return res
-    }
-
-}

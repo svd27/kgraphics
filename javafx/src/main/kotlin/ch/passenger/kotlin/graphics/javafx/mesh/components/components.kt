@@ -1,12 +1,16 @@
 package ch.passenger.kotlin.graphics.javafx.mesh.components
 
+import ch.passenger.kotlin.graphics.geometry.Circle
+import ch.passenger.kotlin.graphics.geometry.Triangle
 import ch.passenger.kotlin.graphics.javafx.mesh.canvas.FXMeshCanvas
-import ch.passenger.kotlin.graphics.javafx.util.button
-import ch.passenger.kotlin.graphics.javafx.util.makeVbox
-import ch.passenger.kotlin.graphics.javafx.util.plus
+import ch.passenger.kotlin.graphics.javafx.mesh.canvas.fill
+import ch.passenger.kotlin.graphics.javafx.mesh.canvas.stroke
+import ch.passenger.kotlin.graphics.javafx.util.*
 import ch.passenger.kotlin.graphics.math.MatrixF
+import ch.passenger.kotlin.graphics.math.Rectangle2D
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.mesh.*
+import ch.passenger.kotlin.graphics.util.logging.d
 import javafx.geometry.Orientation
 import javafx.scene.Parent
 import javafx.scene.Scene
@@ -90,6 +94,7 @@ class MeshCanvasStatusline<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : HBox() {
 }
 
 class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
+    private val log = LoggerFactory.getLogger(this.javaClass)
     val vertexListView: VertexListView<H,V,F> = VertexListView(canvas)
     val edgeListView: EdgeListView<H,V,F> = EdgeListView(canvas)
     val faceListView: FaceListView<H,V,F> = FaceListView(canvas)
@@ -100,10 +105,63 @@ class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
             button("Refresh") {
                 setOnAction { meshContainerTreeView.create() }
             }
+            button("Faces") {
+                setOnAction { MeshOperations(canvas.mesh).createFaces() }
+            }
+            button("Close Holes") {
+                setOnAction { MeshOperations(canvas.mesh).closeHoles() }
+            }
+        }
+
+        val fcont = makeVbox {
+            scrollpane(faceListView)
+            button("Monotonie") {
+                setOnAction {
+                    val f = faceListView.getSelectionModel().getSelectedItem()
+                    if(f!=null) {
+                        faceListView.getSelectionModel().clearSelection()
+                        val monos = MeshOperations(canvas.mesh).classifyMonotnie(f.edge)
+                        canvas.painters.add {
+                            save()
+                            setLineWidth(canvas.px)
+                            setStroke(Color.BLACK)
+                            setFill(Color.BLACK)
+                            monos.forEach {
+                                log.d{"mono: ${it.value}"}
+                                when (it.value) {
+                                    MeshOperations.Monotonie.START -> {
+                                        val r = Rectangle2D.around(it.key.origin.v, canvas.cpx(20))
+                                        log.d{"stroke START $r"}
+                                        stroke(r)
+                                    }
+                                    MeshOperations.Monotonie.END -> {
+                                        val rf = Rectangle2D.around(it.key.origin.v, canvas.cpx(20))
+                                        fill(rf)
+                                    }
+                                    MeshOperations.Monotonie.SPLIT -> {
+                                        val t = Triangle.around(it.key.origin.v, canvas.cpx(20))
+                                        fill(t)
+                                    }
+                                    MeshOperations.Monotonie.MERGE -> {
+                                        val m = Triangle.around(it.key.origin.v, -canvas.cpx(20))
+                                        log.d{"stroke MERGE $m"}
+                                        fill(m)
+                                    }
+                                    MeshOperations.Monotonie.NORM -> {
+                                        val c = Circle(it.key.origin.v, canvas.cpx(20))
+                                        fill(c)
+                                    }
+                                }
+                            }
+                            restore()
+                        }
+                    }
+                }
+            }
         }
         val tpv = TitledPane("Vertices", ScrollPane(vertexListView))
         val tpe = TitledPane("Edges", ScrollPane(edgeListView))
-        val tpf = TitledPane("Faces", ScrollPane(faceListView))
+        val tpf = TitledPane("Faces", fcont)
         val tph = TitledPane("Holes", contvb)
         val accordeon = this
         accordeon.getPanes() add tpv
@@ -134,20 +192,16 @@ class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
     }
 }
 
-class MeshScene<H,V,F>(mesh: Mesh<H,V,F>, meshWidth:Double, invertY:Boolean,
-                       ef:(Vertex<H,V,F>, Vertex<H,V,F>)->H , vf:(VectorF)->V,
-                       kv:KClass<V>, ke:KClass<H>, kf:KClass<F>,
-                       width:Double, height:Double, fill: Paint = Color.WHITE, depthBuffer:Boolean=false,
-                antiAliasing:SceneAntialiasing = SceneAntialiasing.DISABLED) :
+class MeshScene<H,V,F>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
+                       ke: KClass<H>, kf: KClass<F>,
+                       width: Double, height: Double, fill: Paint = Color.WHITE,
+                       depthBuffer: Boolean = false, antiAliasing: SceneAntialiasing = SceneAntialiasing.DISABLED) :
         Scene(BorderPane(), width, height, depthBuffer, antiAliasing) {
     var inspector : Stage? = null
     init {
         setFill(fill)
         val bp = getRoot() as BorderPane
-        val dim = Math.max(mesh.extent.max.x-mesh.extent.min.x, mesh.extent.max.y-mesh.extent.min.y)
-        val delta = meshWidth/dim
-        val base = MatrixF.scale(VectorF(delta, if(invertY) -delta else delta, delta))
-        val canvas = FXMeshCanvas(mesh, base, vf, ef, kv, ke, kf)
+        val canvas = FXMeshCanvas(mesh, minMeshWidth, kv, ke, kf)
         val slider = Slider(.2, 5.0, 1.0)
         slider.setShowTickLabels(true)
         slider.setShowTickMarks(true)
@@ -156,31 +210,37 @@ class MeshScene<H,V,F>(mesh: Mesh<H,V,F>, meshWidth:Double, invertY:Boolean,
         bp.setCenter(ScrollPane(canvas))
         bp.setBottom(MeshCanvasStatusline(canvas))
 
-        val mb = MenuBar()
-        mb.setUseSystemMenuBar(true)
-        val m = Menu("View")
-        val mi = MenuItem("Inspector");
-        mi.setOnAction {
-            if(inspector!=null && !(inspector?.isShowing()?:true)) {
-                inspector?.show()
-                inspector?.toFront()
-            }
-            else {
-                val ei = MeshInspector(canvas)
-                val scene = Scene(ei, 200.0, 300.0)
-                ei.prefWidthProperty().bind(scene.widthProperty())
-                ei.prefHeightProperty().bind(scene.heightProperty())
-                val stage = Stage()
-                inspector=stage
-                stage.initStyle(StageStyle.UTILITY)
-                stage.setScene(scene)
-                stage.show()
+        val mb = menubar {
+            setUseSystemMenuBar(true)
+            menu("View") {
+                item("Inspector") {
+                    setOnAction {
+                        if(inspector!=null && !(inspector?.isShowing()?:true)) {
+                            inspector?.show()
+                            inspector?.toFront()
+                        }
+                        else {
+                            val ei = MeshInspector(canvas)
+                            val scene = Scene(ei, 200.0, 300.0)
+                            ei.prefWidthProperty().bind(scene.widthProperty())
+                            ei.prefHeightProperty().bind(scene.heightProperty())
+                            val stage = Stage()
+                            inspector=stage
+                            stage.initStyle(StageStyle.UTILITY)
+                            stage.setScene(scene)
+                            stage.show()
+                        }
+                    }
+                }
+                check("Show Edge Handles") {
+                    selectedProperty().bindBidirectional(canvas.drawEdgeHandles)
+                }
+                check("InvertY") {
+                    selectedProperty().bindBidirectional(canvas.invertY)
+                }
             }
         }
-        val mh = CheckMenuItem("Show Edge Handles")
-        mh.selectedProperty().bindBidirectional(canvas.drawEdgeHandles)
-        m.getItems().addAll(mi, mh)
-        mb.getMenus().add(m)
+
         bp.setTop(VBox(mb, MeshCanvasToolbar(canvas)))
     }
 }
@@ -194,30 +254,34 @@ class MeshContainerTreeView<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : TreeView<Ha
         this.showRootProperty().set(false)
         create()
         getSelectionModel().selectedItemProperty().addListener { ov, oti, nti ->
-            canvas.transientMarksE.addAll(nti.getValue()())
+            if(nti!=null && nti.getValue() is HalfEdge<H,V,F>)
+                canvas.transientMarksE.addAll(nti.getValue()())
         }
     }
 
     fun create() {
         val root = TreeItem(canvas.mesh.NOEDGE)
         val containers = MeshOperations(canvas.mesh).containment()
-        log.debug("received ${containers.size()} holes $containers")
-        val items = hashMapOf(canvas.mesh.NOEDGE to root)
-        items.remove(canvas.mesh.NOEDGE)
-        for(cc in containers) {
-            if(cc.key !in items) {
-                items[cc.key] = TreeItem(cc.key)
-            }
-            cc.value.forEach {
-                val ti = if(it in items) {
-                    items[it]!!
-                } else TreeItem(it)
-                items[cc.key]!!.getChildren() add ti
-                items.remove(it)
+        log.debug("received ${containers.size} holes $containers")
+        containers.collect(root) {
+            tn, e ->
+            val ntn = TreeItem(e)
+            tn.getChildren() add ntn
+            ntn
+        }
+        setRoot(root)
+        this.setCellFactory {
+            tv ->
+            object : TreeCell<HalfEdge<H, V, F>>() {
+                override fun updateItem(item: HalfEdge<H, V, F>?, empty: Boolean) {
+                    super.updateItem(item, empty)
+                    if (!empty && item != null) {
+                        setText("$item")
+                        this.ttip = "p: ${containers.path(item)} lvl: ${containers.level(item)}"
+                    }
+                }
             }
         }
-        items.values().forEach { root.getChildren() add it }
-        setRoot(root)
     }
 
 }

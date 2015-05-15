@@ -2,6 +2,7 @@ package ch.passenger.kotlin.graphics.javafx.mesh.components
 
 import ch.passenger.kotlin.graphics.javafx.mesh.canvas.FXMeshCanvas
 import ch.passenger.kotlin.graphics.mesh.Face
+import ch.passenger.kotlin.graphics.util.logging.d
 import javafx.collections.FXCollections
 import javafx.collections.ListChangeListener
 import javafx.scene.control.ListCell
@@ -10,10 +11,18 @@ import javafx.scene.control.SelectionMode
 import javafx.scene.control.Tooltip
 import javafx.scene.input.MouseButton
 import javafx.scene.input.MouseEvent
+import org.slf4j.LoggerFactory
 
 class FaceListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, V, F>>(FXCollections.observableList(canvas.mesh.faces.toList())) {
-    val addhandler: (Face<H, V, F>) -> Unit = { getItems().add(it) }
-    val removehandler: (Face<H, V, F>) -> Unit = { getItems().remove(it) }
+    private val log = LoggerFactory.getLogger(this.javaClass)
+    val addhandler: (Face<H, V, F>) -> Unit = {
+        log.d{"items: was ${getItems().size()} -> ${canvas.mesh.faces.count()}"}
+        setItems(FXCollections.observableList(canvas.mesh.faces.toList()))
+    }
+    val removehandler: (Face<H, V, F>) -> Unit = {
+        log.d{"items: was ${getItems().size()} -> ${canvas.mesh.faces.count()}"}
+        setItems(FXCollections.observableList(canvas.mesh.faces.toList()))
+    }
     val dblClickObservers : MutableSet<(Face<H, V, F>)->Unit> = hashSetOf()
 
     init {
@@ -24,6 +33,10 @@ class FaceListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, 
                 while(c.next()) {
                     canvas.markedFaces.removeAll(c.getRemoved())
                     canvas.markedFaces.addAll(c.getAddedSubList())
+                    canvas.markedEdges.clear()
+                    c.getAddedSubList().forEach {
+                        canvas.markedEdges.addAll(it.edge())
+                    }
                 }
             }
         })
@@ -44,8 +57,8 @@ class FaceListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, 
             override fun updateItem(item: Face<H, V, F>?, empty: Boolean) {
                 super.updateItem(item, empty)
                 if(item!=null) {
-                    getTooltip().setText("chain: ${item.edge().map { it.origin.id }.joinToString("->")}")
-                    setText("${item.name}")
+                    getTooltip().setText("${if(item.parent!=canvas.mesh.NOFACE) "p: ${item.parent}" else""} chain: ${item.edge().map { it.origin.id }.joinToString("->")}")
+                    setText("${item}")
                 }
             }
         }}

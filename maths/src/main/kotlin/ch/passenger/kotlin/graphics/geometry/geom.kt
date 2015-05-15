@@ -232,8 +232,10 @@ class AlignedCube(val min: VectorF, val max: VectorF) {
             txmax = tzmax;
         return BoxIntersection(IntersectionType.INTERSECT, txmax, txmin)
     }
-
-
+    val volume : VectorF= max - min
+    val width = volume.x
+    val height = volume.y
+    val depth = volume.z
 
     open data class BoxIntersection(val type:IntersectionType, val t0:Float, val t1:Float)
     object NOPE : BoxIntersection(IntersectionType.NOPE, 0f, 0f)
@@ -245,10 +247,36 @@ class AlignedCube(val min: VectorF, val max: VectorF) {
 
         fun around(c:VectorF, displace:Float) : AlignedCube =
                 AlignedCube(c+-displace,c+displace)
+        fun from(v1:VectorF, v2:VectorF) :AlignedCube {
+            val min = VectorF(v1.dimension) {
+                if(v1[it]<=v2[it]) v1[it] else v2[it]
+            }
+            val max = VectorF(v1.dimension) {
+                if(v1[it]>=v2[it]) v1[it] else v2[it]
+            }
+            return AlignedCube(min, max)
+        }
+        fun ensureVolume(c:AlignedCube,  minv:Float=1e-9f) : AlignedCube  {
+            if(c.width==0f || c.height==0f || c.depth==0f) {
+                val min = VectorF(c.min.dimension) {if(c.max[it]-c.min[it]==0f) c.min[it]-minv else c.min[it]}
+                val max = VectorF(c.min.dimension) {if(c.max[it]-c.min[it]==0f) c.max[it]+minv else c.max[it]}
+                return AlignedCube(min, max)
+            } else
+                return c
+        }
+        fun ensureVolume(v1:VectorF, v2:VectorF, minv:Float=1e-9f) : AlignedCube = ensureVolume(from(v1, v2), minv)
     }
 }
 
-class Triangle(val p0:VectorF, val p1:VectorF, val p2:VectorF)
+class Triangle(val p0:VectorF, val p1:VectorF, val p2:VectorF) {
+    override fun toString(): String = "Triangle($p0, $p1, $p2)"
+
+    companion object {
+        fun around(v:VectorF, h:Float) : Triangle = Triangle(VectorF(v.x-h/2f, v.y-h/2f, v.z), VectorF(v.x, v.y+h/2f, v.z), VectorF(v.x+h/2f, v.y-h/2f, v.z))
+    }
+}
+
+class Circle(val center:VectorF, val radius:Float)
 
 class Ray(val origin:VectorF, val dir:VectorF) {
     val inverse : VectorF = MutableVectorF(1/dir.x, 1/dir.y, 1/dir.z)

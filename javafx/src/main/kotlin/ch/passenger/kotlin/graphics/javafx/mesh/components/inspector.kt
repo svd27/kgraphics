@@ -42,15 +42,15 @@ class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
         interpolator = canvas.edgeHandlers[e]
         if(v!=canvas.mesh.NOEDGE) {
             ia.setText("%.4f".format(v.innerAngle))
+            ia.ttip = "%.4f".format(v.outerAngle)
+
             cross.setText("%.4f".format(v.cross.z))
-            if(cross.getTooltip()==null) {
-                cross.setTooltip(Tooltip())
-            }
-            cross.getTooltip().setText("${v.cross}")
+            cross.ttip = "${v.cross}"
             cycle.setSelected(v.cycle)
             if(v.cycle) {
                 pi.setText("%.4f".format(v.piLaw))
                 sia.setText("%.4f".format(v.sumInnerAngles))
+                sia.ttip = "%.4f".format(v.sumOuterAngles)
                 if(scross.getTooltip()==null) {
                     scross.setTooltip(Tooltip())
                 }
@@ -62,7 +62,7 @@ class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
                                 "ivf: ${v.sumCross is ImmutableVectorF} " +
                                 "mvf: ${v.sumCross is MutableVectorF}"}
                 }
-                scross.getTooltip().setText("${v.sumCross}")
+                scross.ttip = "${v.sumCross}"
                 inner.setSelected(v.insideLooking)
 
             }

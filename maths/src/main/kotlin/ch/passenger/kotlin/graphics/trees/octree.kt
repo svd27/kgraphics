@@ -1,6 +1,7 @@
 package ch.passenger.kotlin.graphics.trees
 
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
+import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.mesh.Face
 import ch.passenger.kotlin.graphics.mesh.HalfEdge
@@ -11,9 +12,10 @@ import org.slf4j.LoggerFactory
 import java.util.*
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.Callable
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.reflect.jvm.java
 
 /**
@@ -179,82 +181,149 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
 
     data class Result<H,V,F>(val edges:Iterable<HalfEdge<H,V,F>> = emptyList(), val vertices:Iterable<Vertex<H,V,F>> = emptyList(), val faces:Iterable<Face<H,V,F>> = emptyList() )
 
+    val rw = ReentrantReadWriteLock()
     var root : Node = Leaf(extent)
 
-    fun plus(v: Vertex<H, V, F>) : Octree<H,V,F> {
+    fun insert(v: Vertex<H, V, F>) : Octree<H,V,F> {
         if(v.v !in extent) {
             log.w {
                 "$v exceeds currenr extent: $extent rebuilding tree"
             }
-            val nr = Leaf(extent+v.v)
-            root.vertices.forEach { nr+it }
-            root.edges.forEach { nr+it }
-            root.faces.forEach { nr+it }
-            root = nr
-            log.d{"extent now $extent"}
+            extend(extent+v.v)
         }
         root = root + v
         return this
     }
-    fun minus(v: Vertex<H, V, F>) : Octree<H,V,F> {
-        root = root - v
-        return this
+
+    fun extend(ne:AlignedCube) {
+        val nr = Leaf(ne)
+        root.vertices.forEach { nr+it }
+        root.edges.forEach { nr+it }
+        root.faces.forEach { nr+it }
+        root = nr
+        log.d{"extent now $extent"}
     }
-    fun plus(e: HalfEdge<H, V, F>) : Octree<H,V,F> {
+
+    fun insert(e: HalfEdge<H, V, F>) : Octree<H,V,F> {
         root = root + e
         return this
     }
-    fun minus(e: HalfEdge<H, V, F>) : Octree<H,V,F> {
-        root = root - e
-        return this
-    }
-    fun plus(f: Face<H, V, F>) : Octree<H,V,F> {
+
+    fun insert(f: Face<H, V, F>) : Octree<H,V,F> {
         root = root + f
         return this
     }
-    fun minus(f: Face<H, V, F>) : Octree<H,V,F> {
+
+    fun minus(v: Vertex<H, V, F>) : Octree<H,V,F> = write {
+        if(v in pendingVertices) pendingVertices.remove(v)
+        root = root - v
+        this
+    }
+
+    fun minus(e: HalfEdge<H, V, F>) : Octree<H,V,F> = write {
+        if(e in pendingEdges) pendingEdges.remove(e)
+        root = root - e
+        this
+    }
+
+    fun minus(f: Face<H, V, F>) : Octree<H,V,F> = write {
+        if(f in pendingFaces) pendingFaces.remove(f)
         root = root - f
-        return this
-    }
-    val extent : AlignedCube get() = root.extent
-
-
-
-    fun vat(v:VectorF) : Vertex<H,V,F>? = root.vat(v)
-
-    fun find(hotzone:AlignedCube) : Result<H,V,F>  = root.find(hotzone)
-    fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = root.findEdges(hotzone)
-    fun findVertices(hotzone:AlignedCube) : Iterable<Vertex<H,V,F>> = root.findVertices(hotzone)
-    fun findFaces(hotzone:AlignedCube) : Iterable<Face<H,V,F>> = root.findFaces(hotzone)
-}
-
-trait DeferredBuilder<T> {
-    val q : Queue<T>
-    val lock : ReentrantReadWriteLock
-    val exec : java.util.concurrent.ExecutorService
-    val settleTs : Int get() = 5
-
-    fun add(vararg t:T ) = with(lock.writeLock()) {q.addAll(t); if(q.size()>settleTs) settle(q)}
-    fun settle(q:PriorityQueue<T>)
-    fun task(vararg t:T) : ()->Unit
-    fun create() {
-        with(lock.writeLock()) {
-            q.forEach {
-                exec.submit(task(it))
-            }
-        }
+        this
     }
 
-    val ready : Boolean get() {with(lock.readLock()){q.isEmpty()}}
+    fun plus(v: Vertex<H, V, F>) : Octree<H,V,F> = write {
+        pendingVertices.offer(v)
+        this
+    }
 
-    fun onReady(cb:()->Unit) = with(lock.readLock()) {cb()}
+    fun plus(e: HalfEdge<H, V, F>) : Octree<H,V,F> = write {
+        pendingEdges.offer(e)
+        this
+    }
 
-    fun<T> with(l: Lock, cb:()->T) : T {
-        l.lock()
+    fun plus(f: Face<H, V, F>) : Octree<H,V,F> = write {
+        pendingFaces.offer(f)
+        this
+    }
+
+    val extent : AlignedCube get() = query { root.extent }
+    val pendingFaces : BlockingQueue<Face<H,V,F>>
+    val pendingEdges : BlockingQueue<HalfEdge<H,V,F>>
+    val pendingVertices : BlockingQueue<Vertex<H,V,F>>
+
+    init {
+        pendingFaces= LinkedBlockingQueue()
+        pendingEdges = LinkedBlockingQueue()
+        pendingVertices = LinkedBlockingQueue()
+
+        Executors.newScheduledThreadPool(1).scheduleAtFixedRate({update()}, 500L, 500L, TimeUnit.MILLISECONDS)
+    }
+
+    private fun update() {
+        rw.writeLock().lock()
         try {
-            return cb()
+            while (pendingVertices.size()>0 || pendingEdges.size()>0 || pendingFaces.size()>0) {
+                val verts = arrayListOf<Vertex<H,V,F>>()
+                val edges: ArrayList<HalfEdge<H, V, F>>
+                pendingVertices.drainTo(verts)
+                if(verts.size()>0) {
+                    val min = MutableVectorF(verts.first().v)
+                    val max = MutableVectorF(min)
+                    verts.forEach {
+                        min().forEachIndexed { i, fl -> if(it.v[i]<fl) min[i] =  it.v[i]}
+                        max().forEachIndexed { i, fl -> if(it.v[i]>fl) max[i] =  it.v[i]}
+                    }
+                    if(min !in extent || max !in extent) {
+                        extend(AlignedCube(min, max)+extent)
+                    }
+                    log.debug("inserting ${verts.size()} vertices")
+                    verts.forEach {insert(it)}
+                }
+                edges = arrayListOf<HalfEdge<H,V,F>>()
+                pendingEdges.drainTo(edges)
+                edges.forEach{insert(it)}
+                val faces = arrayListOf<Face<H,V,F>>()
+                pendingFaces.drainTo(faces)
+                faces.forEach{insert(it)}
+            }
+
         } finally {
-            l.unlock()
+            rw.writeLock().unlock()
         }
     }
+
+    private val ready : Boolean get() = pendingEdges.size()==0 && pendingFaces.size()==0 && pendingVertices.size()==0
+
+    fun<T> query(cb:()->T) : T {
+        rw.readLock().lock()
+        try {
+            while(!ready) {
+                rw.readLock().unlock()
+                update()
+                rw.readLock().lock()
+            }
+            return cb()
+        }finally {
+            rw.readLock().unlock()
+        }
+    }
+
+    fun<T> write(cb:()->T) : T {
+        rw.writeLock().lock()
+        try {
+            if(!ready) update()
+            return cb()
+        }finally {
+            rw.writeLock().unlock()
+        }
+    }
+
+    fun vat(v:VectorF) : Vertex<H,V,F>? = query { root.vat(v) }
+
+    fun find(hotzone:AlignedCube) : Result<H,V,F>  = query { root.find(hotzone) }
+    fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = query { root.findEdges(hotzone) }
+    fun findVertices(hotzone:AlignedCube) : Iterable<Vertex<H,V,F>> = query { root.findVertices(hotzone) }
+    fun findFaces(hotzone:AlignedCube) : Iterable<Face<H,V,F>> = query { root.findFaces(hotzone) }
 }
+

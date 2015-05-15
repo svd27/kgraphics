@@ -1,16 +1,14 @@
 package ch.passenger.kotlin.graphics.javafx.mesh.canvas
 
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
+import ch.passenger.kotlin.graphics.geometry.Circle
 import ch.passenger.kotlin.graphics.geometry.Triangle
 import ch.passenger.kotlin.graphics.math.LineSegment
 import ch.passenger.kotlin.graphics.math.MatrixF
 import ch.passenger.kotlin.graphics.math.Rectangle2D
 import ch.passenger.kotlin.graphics.math.VectorF
-import ch.passenger.kotlin.graphics.mesh.HalfEdge
-import ch.passenger.kotlin.graphics.mesh.Mesh
-import ch.passenger.kotlin.graphics.mesh.Vertex
 import ch.passenger.kotlin.graphics.javafx.util.*
-import ch.passenger.kotlin.graphics.mesh.Face
+import ch.passenger.kotlin.graphics.mesh.*
 import ch.passenger.kotlin.graphics.util.collections.RingBuffer
 import ch.passenger.kotlin.graphics.util.logging.d
 import javafx.application.Application
@@ -98,6 +96,44 @@ fun GraphicsContext.lineTo(p:Vertex<*,*,*>) {
     lineTo(p.v)
 }
 
+fun GraphicsContext.stroke(r:Rectangle2D) {
+    beginPath()
+    moveTo(r.min); lineTo(r.min.x.toDouble(), r.max.y.toDouble());
+    lineTo(r.max); lineTo(r.max.x.toDouble(), r.min.y.toDouble())
+    closePath(); stroke()
+}
+
+fun GraphicsContext.fill(r:Rectangle2D) {
+    beginPath()
+    moveTo(r.min); lineTo(r.min.x.toDouble(), r.max.y.toDouble());
+    lineTo(r.max); lineTo(r.max.x.toDouble(), r.min.y.toDouble())
+    closePath(); fill()
+}
+
+fun GraphicsContext.fill(r:Triangle) {
+    log.d{"fill triangle $r"}
+    beginPath(); moveTo(r.p0); lineTo(r.p1); lineTo(r.p2); closePath()
+    fill()
+}
+
+fun GraphicsContext.stroke(r:Triangle) {
+    beginPath(); moveTo(r.p0); lineTo(r.p1); lineTo(r.p2); closePath()
+    stroke()
+}
+
+fun GraphicsContext.fill(r:Circle) {
+    val tl = r.center - r.radius
+    log.d{"circle tl: $tl w: ${2.0*r.radius}"}
+    fillOval(tl.x.toDouble(), tl.y.toDouble(), 2.0*r.radius, 2.0*r.radius)
+}
+
+fun GraphicsContext.stroke(r:Circle) {
+    val tl = r.center - r.radius
+    strokeOval(tl.x.toDouble(), tl.y.toDouble(), 2.0*r.radius, 2.0*r.radius)
+}
+
+
+
 fun GraphicsContext.halfarrow(p1:Point2D, p2:Point2D, len:Double, angle:Double=35.0)  {
     val dx = p2.getX()-p1.getX();
     val dy = p2.getY()-p1.getY();
@@ -151,7 +187,7 @@ trait EdgeHandler<H,V,F> {
 }
 
 
-class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexFactory:(VectorF)->V, val edgeFactory:(Vertex<H,V,F>, Vertex<H,V,F>)->H,
+class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                           val kv:KClass<V>, val ke:KClass<H>, val kf:KClass<F>) : Canvas() {
     private val log = LoggerFactory.getLogger(javaClass<FXMeshCanvas<H,V,F>>())
     enum class Modes {
@@ -172,23 +208,16 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
     val lblvertices : BooleanProperty = SimpleBooleanProperty(false)
     val vbuffer : RingBuffer<Vertex<H,V,F>> = RingBuffer(2)
     val zoom : DoubleProperty = SimpleDoubleProperty(1.0)
+    val invertY : BooleanProperty = SimpleBooleanProperty(false)
 
     val vertexWalker = VertexWalker(this)
     val triangleWalker = TriangleWalker(this)
     val edgeHandlers : MutableMap<HalfEdge<H,V,F>,EdgeHandler<H,V,F>> = hashMapOf()
     val drawEdgeHandles : BooleanProperty = SimpleBooleanProperty(true)
+    val painters : ArrayList<GraphicsContext.()->Unit> = arrayListOf()
 
     init {
         setFocusTraversable(true)
-        /*
-        val r2d = Rectangle2D.create(base(mesh.extent.min), base(mesh.extent.max))
-        setWidth(r2d.w.toDouble());setHeight(r2d.h.toDouble())
-        val tcenter = MatrixF.translate(VectorF(getWidth() / 2, getHeight() / 2, 0, 1))
-        val tzoom = MatrixF.scale(VectorF(zoom.get(), zoom.get(), zoom.get()))
-        val complete = (base * tcenter * tzoom)
-        getGraphicsContext2D().transform(complete.toFXAffine())
-                inverse = getGraphicsContext2D().getTransform().createInverse()
-                */
         initTransform()
         zoom.addListener { ov, no, nn ->
             initTransform(); dirty()
@@ -256,7 +285,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
                     val x = currentMouseTransformedX.get()
                     val y = currentMouseTransformedY.get()
                     val v = VectorF(x, y, 0)
-                    mesh.add(v, vertexFactory(v))
+                    mesh.add(v)
                 }
                 Modes.ADDEDGE -> {
                     if(it.getButton()== MouseButton.SECONDARY) vbuffer.clear()
@@ -268,7 +297,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
                             if (vbuffer.size == 2) {
                                 val v0 = vbuffer[1]!!
                                 val v1 = vbuffer[0]!!
-                                mesh.plus(v0, v1, edgeFactory(v0, v1), edgeFactory(v1, v0))
+                                mesh.add(v0, v1)
                                 vbuffer.clear(); vbuffer.push(v1)
                             }
                         }
@@ -341,24 +370,42 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
         val w = VectorF(3) {if(it<2) hotzone.getValue().toFloat()*px.toFloat()/2 else 0f}
         return  AlignedCube(v-w, v+w)
     }
+    val px : Double get() = ((mesh.extent.max.x-mesh.extent.min.x)) / getWidth()
 
     fun initTransform() {
-        val r2d = Rectangle2D.create(base(mesh.extent.min)*zoom.get().toFloat(), base(mesh.extent.max)*zoom.get().toFloat())
-        setWidth(r2d.w.toDouble());setHeight(r2d.h.toDouble())
+        val extent = mesh.extent
+        log.d{"extent now: $extent"}
         log.trace("${zoom.get()}: ${getWidth()}x${getHeight()}")
+        val invy = if(invertY.get()) MatrixF.scale(VectorF(1, -1, 1)) else MatrixF.scale(1f)
         val tzoom = MatrixF.scale(zoom.get().toFloat())
-        val tzero = MatrixF.translate(mesh.extent.min)
-        val scale = tzero * base * tzoom
-        val tmin = scale(mesh.extent.min); val tmax = scale(mesh.extent.max)
+        val zero = extent.min
+        val ew = extent.max.x - extent.min.x
+        val prescale = if(ew <minw) {
+            log.d{"prescale: ${minw/ew}"}
+            MatrixF.scale((minw/ew).toFloat())
+        } else MatrixF.scale(1f)
+        val tzero = MatrixF.translate(zero)
+        val scale = tzero * invy * prescale *  tzoom
+        val tmin = scale(extent.min); val tmax = scale(extent.max)
         val tr = Rectangle2D.create(tmin, tmax).scale(.1f)
-        setWidth(tr.w.toDouble());setHeight(tr.h.toDouble())
-        log.d{"${mesh.extent.min}x${mesh.extent.max} -> ${tmin}x$tmax"}
+        setWidth(tr.w.toDouble());setHeight(Math.abs(tr.h.toDouble()))
+        log.d{"${extent.min}x${extent.max} -> ${tmin}x$tmax"}
         log.d{"canvas wxh ${getWidth()}x${getHeight()}"}
-        //VectorF(getWidth() / 2, getHeight() / 2, 0, 1)
-        val tcenter = MatrixF.translate(-(tmin-tmax)*.05f-tmin)
+        MatrixF.translate(-(tmin-tmax)*.05f-tmin)
+
+        /*
+        val tcenter = if(!invertY.get()) MatrixF.translate(-(tmin-tmax)*.05f-tmin) else {
+            val yt = -(tmin-tmax)*.05f-tmin
+            val rt = VectorF(yt.x, getHeight()-(Math.abs(((tmin-tmax)).y)*.05f), yt.z)
+            MatrixF.translate(rt)
+        }
+        */
+        val tcenter = if(invertY.get()) {
+            val v = -(tmin-tmax)*.05f-tmin
+            MatrixF.translate(VectorF(v.x, Math.abs(tmax.y), v.z))
+        } else  MatrixF.translate(-(tmin-tmax)*.05f-tmin)
         val complete = (scale * tcenter)
         getGraphicsContext2D().setTransform(complete.toFXAffine())
-
         inverse = getGraphicsContext2D().getTransform().createInverse()
         dirty()
     }
@@ -383,12 +430,12 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
 
     fun addEdge(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>) {
         if(v0==v1) return
-        mesh.plus(v0, v1, edgeFactory(v0, v1), edgeFactory(v1, v0))
+        mesh.add(v0, v1)
         dirty()
     }
 
     override fun isResizable(): Boolean = false
-    val px : Double get() = ((mesh.extent.max.x-mesh.extent.min.x)) / getWidth()
+
 
     val currentMouseTransformedX : DoubleProperty = SimpleDoubleProperty()
     val currentMouseTransformedY : DoubleProperty = SimpleDoubleProperty()
@@ -397,7 +444,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
     fun draw() {
         val g = getGraphicsContext2D()
         g.save()
-        val px = (mesh.extent.max.x-mesh.extent.min.x)/getWidth()
+
         g.setFont(Font.font(16*px))
         g.save(); g.setTransform(Affine()); g.clearRect(0.0, 0.0, getWidth(), getHeight()); g.restore()
         g.setStroke(Color.DARKSLATEGRAY)
@@ -458,6 +505,10 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
             }
         }
         g.restore()
+        painters.forEach {
+            g.it()
+        }
+        painters.clear()
         dirty = false
     }
 
@@ -477,6 +528,9 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val base:MatrixF, val vertexF
 
         }
     }
+
+    fun fpx() : Float = px.toFloat()
+    fun cpx(n:Number) : Float = fpx()*n.toFloat()
 }
 
 class VertexWalker<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) {

@@ -59,7 +59,7 @@ fun Logger.em(m:Marker, vararg args:Any, p:Logger.()->String) {
     }
 }
 
-fun Logger.e(vararg args:Any, p:Logger.()->String) {
+fun Logger.e(vararg args:Any, p:Logger.()->String={""}) {
     if(args.size()>0 && args.first() is Marker) em(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
     else if(isErrorEnabled()) {
         error(p(), *args)

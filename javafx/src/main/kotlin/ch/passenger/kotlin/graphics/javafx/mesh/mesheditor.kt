@@ -8,6 +8,7 @@ import ch.passenger.kotlin.graphics.javafx.util.menu
 import ch.passenger.kotlin.graphics.javafx.util.menubar
 import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.mesh.Mesh
+import ch.passenger.kotlin.graphics.mesh.MeshDataFactory
 import ch.passenger.kotlin.graphics.mesh.Vertex
 import ch.passenger.kotlin.graphics.mesh.svg.SVGMeshData
 import ch.passenger.kotlin.graphics.mesh.svg.createMesh
@@ -47,10 +48,9 @@ class MeshEditor() : Application() {
                 item("New Generic") {
                     setOnAction {
                         val stage = Stage()
-                        val mesh = Mesh<Unit,Unit,Unit >(AlignedCube.around(VectorF(0, 0, 0), 1f), {e, p ->})
-                        stage.setScene(MeshScene(mesh, 1000.0, false, {v0, v1 -> }, {},
-                                Unit::class, Unit::class, Unit::class,
-                                600.0, 600.0))
+                        val mesh = Mesh<Unit,Unit,Unit >(AlignedCube.around(VectorF(0, 0, 0), 1f), MeshDataFactory.from(Unit,
+                                {v-> }, {v0,v1->}, {e, p -> }))
+                        stage.setScene(MeshScene(mesh, 1000.0, Unit::class, Unit::class, Unit::class, 600.0, 600.0))
                         stage.show()
                     }
                 }
@@ -88,29 +88,25 @@ class MeshEditor() : Application() {
                                             taError.appendText(it.path)
                                             val ps = parseSVGPath(it.path)
                                             val klass = SVGMeshData::class
-                                            val m = createMesh<SVGMeshData, SVGMeshData, SVGMeshData>(ps, null, {md, v -> md},
-                                                    {md, v0, v1 -> md}, {md, e,p -> md}) as Mesh<SVGMeshData,SVGMeshData,SVGMeshData>
+                                            val m = createMesh<SVGMeshData, SVGMeshData, SVGMeshData>(ps)
                                             val ef:(v0: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>, v1: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>)->SVGMeshData =
                                                     {v0: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>, v1: Vertex<SVGMeshData,SVGMeshData,SVGMeshData> -> SVGMeshData.reverse()}
-                                            val med = MeshScene(m, 1000.0, false, ef = ef,
-                                                    vf = {v -> SVGMeshData.reverse()}, kv = klass, ke = klass, kf = klass, width = 800.0, height = 600.0)
+                                            val med = MeshScene(m, 1000.0, kv = klass, ke = klass, kf = klass, width = 800.0, height = 600.0)
                                             val stage = Stage(); stage.setTitle("${it.name}")
                                             stage.setScene(med)
                                             stage.show()
                                         } catch(e:Exception) {
+                                            log.e(e) {
+                                                "${it.name}:${it.unicode} {}"
+                                            }
                                             taError.setWrapText(true)
                                             taError.setText("")
                                             taError.appendText(it.path+"\n")
-
                                             taError.appendText(e.getMessage())
                                             taError.appendText("\n")
                                             val ss = StringWriter()
                                             e.printStackTrace(PrintWriter(ss))
                                             taError.appendText(ss.toString())
-
-                                            log.e(e) {
-                                                "${it.name}:${it.unicode} {}"
-                                            }
                                         }
                                     }
                                 }

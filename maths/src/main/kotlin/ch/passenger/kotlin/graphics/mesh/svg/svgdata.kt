@@ -6,10 +6,9 @@ import ch.passenger.kotlin.graphics.geometry.Curve
 import ch.passenger.kotlin.graphics.geometry.QuadBezier
 import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.math.VectorF
-import ch.passenger.kotlin.graphics.mesh.Face
-import ch.passenger.kotlin.graphics.mesh.HalfEdge
-import ch.passenger.kotlin.graphics.mesh.Mesh
-import ch.passenger.kotlin.graphics.mesh.Vertex
+import ch.passenger.kotlin.graphics.mesh
+import ch.passenger.kotlin.graphics.mesh.*
+import ch.passenger.kotlin.graphics.util.logging.d
 import ch.passenger.kotlin.graphics.util.logging.t
 import ch.passenger.kotlin.graphics.util.logging.w
 import ch.qos.logback.classic.Level
@@ -35,8 +34,8 @@ trait SVGMeshData {
     val origin : VectorF
     val target:VectorF
     companion object {
-        open data class MD(override val paths: Iterable<SVGPath>, override val pathIdx: Int, override val idxPathelement: Int, override val coordOffset:Int, override var pred: SVGMeshData?) : SVGPathMeshData
-        open data class MDCurve(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, coordOffset:Int, pred: SVGMeshData?) : MD(paths, path, idxPathelement, coordOffset, pred), SVGCurveMeshData {
+        open data class MD(override val paths: Iterable<SVGPath>, override val pathIdx: Int, override val idxPathelement: Int, override val coordOffset: Int, override var pred: SVGMeshData?) : SVGPathMeshData
+        open data class MDCurve(paths: Iterable<SVGPath>, pathIdx: Int, idxPathelement: Int, coordOffset: Int, pred: SVGMeshData?) : MD(paths, pathIdx, idxPathelement, coordOffset, pred), SVGCurveMeshData {
             override val curve: Curve
                 get() {
                     val pe = pathElement
@@ -61,22 +60,22 @@ trait SVGMeshData {
                         }
                         is SVGSmoothCubic -> {
                             val prev = pred
-                            if(prev is SVGCurveMeshData && (prev.pathElement is SVGCubic || prev.pathElement is SVGSmoothCubic)) {
+                            if (prev is SVGCurveMeshData && (prev.pathElement is SVGCubic || prev.pathElement is SVGSmoothCubic)) {
                                 val cp1 = prev.curve.cps.last().reflect(origin)
                                 val a = origin
-                                val c =if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
-                                val d = if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset+1)
+                                val c = if (pe.relative) origin + pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
+                                val d = if (pe.relative) origin + pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset + 1)
                                 return CubicBezier(a, d, listOf(cp1, c))
                             } else throw UnsupportedOperationException()
                         }
                         is SVGQuad -> {
-                            val b = if(pe.relative) origin+pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
-                            val c = if(pe.relative) origin+pe.coords.elementAt(coordOffset+1) else pe.coords.elementAt(coordOffset+1)
+                            val b = if (pe.relative) origin + pe.coords.elementAt(coordOffset) else pe.coords.elementAt(coordOffset)
+                            val c = if (pe.relative) origin + pe.coords.elementAt(coordOffset + 1) else pe.coords.elementAt(coordOffset + 1)
                             return QuadBezier(origin, c, listOf(b))
                         }
                         is SVGSmoothQuad -> {
                             val prev = pred
-                            if(prev is SVGCurveMeshData && (prev.pathElement is SVGQuad || prev.pathElement is SVGSmoothQuad)) {
+                            if (prev is SVGCurveMeshData && (prev.pathElement is SVGQuad || prev.pathElement is SVGSmoothQuad)) {
                                 val cp1 = prev.curve.cps.first().reflect(origin)
                                 return QuadBezier(origin, target, listOf(cp1))
                             } else throw UnsupportedOperationException()
@@ -86,30 +85,42 @@ trait SVGMeshData {
                 }
         }
 
-            fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, offset:Int, pred: SVGMeshData?): SVGMeshData {
-                val pe = paths.elementAt(path).elements[idxPathelement]
-                return when (pe) {
-                    is SVGQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
-                    is SVGSmoothQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
-                    is SVGCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
-                    is SVGSmoothCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
-                    else -> MD(paths, path, idxPathelement, offset, pred)
-                }
-            }
-
-            fun reverse(): SVGMeshData = object : SVGReversePath {
-                override var pred: SVGMeshData?
-                    get() = null
-                    set(value) {
-                    }
-                override val origin: VectorF
-                    get() = VectorF(0, 0, 0)
-                override val target: VectorF
-                    get() = origin
+        fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, offset: Int, pred: SVGMeshData?): SVGMeshData {
+            val pe = paths.elementAt(path).elements[idxPathelement]
+            return when (pe) {
+                is SVGQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
+                is SVGSmoothQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
+                is SVGCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
+                is SVGSmoothCubic -> MDCurve(paths, path, idxPathelement, offset, pred)
+                else -> MD(paths, path, idxPathelement, offset, pred)
             }
         }
 
+        fun reverse(): SVGMeshData = object : SVGReversePath {
+            override var pred: SVGMeshData?
+                get() = null
+                set(value) {
+                }
+            override val origin: VectorF
+                get() = VectorF(0, 0, 0)
+            override val target: VectorF
+                get() = origin
+        }
+
+        fun inserted(): SVGInserted = object : SVGInserted {
+            override var pred: SVGMeshData?
+                get() = null
+                set(value) {
+                }
+            override val origin: VectorF
+                get() = VectorF(0, 0, 0)
+            override val target: VectorF
+                get() = origin
+        }
+    }
+
 }
+trait SVGInserted : SVGMeshData
 trait SVGReversePath : SVGMeshData
 trait SVGPathMeshData : SVGMeshData {
     val paths:Iterable<SVGPath>
@@ -124,7 +135,7 @@ trait SVGPathMeshData : SVGMeshData {
 
     override val target : VectorF get() {
         if(pathElement.relative) {
-            return when(pathElement) {
+            when(pathElement) {
                 is SVGMove -> {
                     return origin
                 }
@@ -152,7 +163,7 @@ trait SVGPathMeshData : SVGMeshData {
                 else -> throw IllegalStateException("$pathElement ${pathElement.javaClass}")
             }
         } else {
-            return when(pathElement) {
+            when(pathElement) {
                 is SVGMove -> {
                     return origin
                 }
@@ -189,34 +200,73 @@ trait SVGCurveMeshData : SVGPathMeshData {
 
 
 fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
-        createMesh(paths:Iterable<SVGPath>, extent:AlignedCube?=null,
-                   cv:(SVGMeshData,VectorF)->V,
-                   ce:(SVGMeshData, Vertex<H, V, F>,Vertex<H, V, F>)->H,
-                   cf:(SVGMeshData, parent: Face<H,V,F>, edge:HalfEdge<H,V,F>)->F
-                   )  : Mesh<H,V,F> {
+        createMesh(paths:Iterable<SVGPath>)  : Mesh<H,V,F> {
     val log = LoggerFactory.getLogger("SVG")
     if(log is ch.qos.logback.classic.Logger) {
         log.setLevel(Level.TRACE)
     }
 
+    val min = MutableVectorF(3) { Float.POSITIVE_INFINITY}
+    val max = MutableVectorF(3) { Float.NEGATIVE_INFINITY}
+    paths.forEach { it.elements.forEach { it.coords.forEach { it().forEachIndexed { i, fl ->
+        if(min[i]>fl) min[i] = fl; if(max[i]<fl) max[i] = fl
+    } } } }
+    val sub = max-min
+    val dim = Math.max(sub.x, sub.y)
+    val tolerance = dim/100000
+    log.d{"tolerance: $tolerance"}
 
-    val m = Mesh<H,V,F>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), { e, parent ->
-        cf(e.data, parent, e)
-    })
-
-    paths.forEachIndexed { idxPath, path ->
+    class PContext() {
+        var idxPath:Int=0
         var pred : SVGMeshData? = null
+        var idxElement = 0
+        var offset:Int = 0
+
+
+        fun data() : H {val data =SVGMeshData(paths, idxPath, idxElement, offset, pred); pred=data; return data as H}
+        fun vdata() : V {val data = SVGMeshData(paths, idxPath, idxElement, offset, pred) as V; if(pred==null) pred=data; return data}
+        fun revp() : H = SVGMeshData.reverse() as H
+    }
+    val df : MeshDataFactory<H, V, F, PContext> = MeshDataFactory.from(PContext(),
+            {
+                (dataFactory.context as PContext).vdata()
+            },
+            {
+                v0, v1 -> (dataFactory.context as PContext).data()
+            },
+            {
+                e, p -> SVGMeshData.reverse() as F
+            })
+    val m = Mesh<H,V,F>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), df)
+
+    paths.forEachIndexed { idxp, path ->
+        fun context() : PContext = m.dataFactory.context as PContext
+        context().idxPath = idxp
         var current : Vertex<H,V,F>? = null
         var vstart : Vertex<H,V,F>? = null
-        path.elements.forEachIndexed { idxElement, element ->
-            var offset:Int = 0
-            fun data() : SVGMeshData {val data =SVGMeshData(paths, idxPath, idxElement, offset, pred); pred=data; return data}
-            fun vdata() : SVGMeshData = SVGMeshData(paths, idxPath, idxElement, offset, pred)
-            fun revp() : SVGMeshData = SVGMeshData.reverse()
-            fun vert(v:VectorF) : Vertex<H,V,F> = if(v in m) m[v]!! else m.add(v, cv(vdata(), v))
+        path.elements.forEachIndexed { idxe, element ->
+            context().idxElement = idxe
+            context().offset = 0
+
+            fun vert(v:VectorF) : Vertex<H,V,F> {
+                if(v in m) {
+                    log.t{"$v already in using ${m[v]}"}
+                    return m[v]!!
+                } else {
+                    val cube = AlignedCube.around(v, tolerance/2)
+                    val verts = m.findVertices(cube)
+                    log.t{"vertices in $cube: $verts"}
+                    if(verts.count()==0)
+                      return m.add(v)
+                    else {
+                        log.w{"$v ignored using existing ${verts}"}
+                        return verts.sortBy {VectorF.distance(v, it.v)}.first()
+                    }
+                }
+            }
             fun line(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>) {
                 log.t{ "edge $v0->$v1"}
-                m.plus(v0, v1, ce(data(), v0, v1), ce(revp(), v1, v0))
+                m.add(v0, v1)
             }
             fun line(v:VectorF) {
                 log.t(element, current?:"") {"->$element $current ${element.svg}"}
@@ -238,16 +288,16 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                     line(start, current!!)
                     else log.w {"ignored empty edge ${start}->${current} ${element} ${element.svg}"}
                     start = current!!
-                    offset++
+                    context().offset++
                 }
                 log.t(element, current?:"") {"<<$element $current ${element.svg}"}
             }
-            offset = 0
+            context().offset = 0
             when(element) {
                 is SVGMove -> {
-                    assert(idxElement==0)
+                    assert(context().idxElement==0)
                     val pos :VectorF= element.coords.first()
-                    current = m.add(pos, cv(data(), pos))
+                    current = m.add(pos)
                     log.t {"M at $current"}
                     vstart = current
                     val tail = element.coords.drop(1)
@@ -264,21 +314,21 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                 }
                 is SVGCubic -> {
                     for(i in 0..element.coords.count()-1 step 3) {
-                        offset+=i
+                        context().offset+=i
                         val pos = element.coords.elementAt(i+2)
                         line(pos)
                     }
                 }
                 is SVGSmoothCubic -> {
                     for(i in 0..element.coords.count()-1 step 2) {
-                        offset+=i
+                        context().offset+=i
                         val pos = element.coords.elementAt(i+1)
                         line(pos)
                     }
                 }
                 is SVGQuad -> {
                     for(i in 0..element.coords.count()-1 step 2) {
-                        offset+=i
+                        context().offset+=i
                         val pos = element.coords.elementAt(i+1)
                         line(pos)
                     }
@@ -287,12 +337,18 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                     lines(element.coords)
                 }
                 is SVGClose -> {
-                    if(current!=vstart)
-                    line(current!!, vstart!!)
+                    if(current!=vstart) {
+                        log.d{"path close distance ${VectorF.distance(current!!.v, vstart!!.v)}"}
+                        line(current!!, vstart!!)
+                    }
                 }
             }
         }
     }
+    m.dataFactory = MeshDataFactory.from<H,V,F,Unit>(Unit, {SVGMeshData.inserted() as V},
+            {v0, v1-> SVGMeshData.inserted() as H},
+            {e, p -> SVGMeshData.inserted() as F})
+
     return m
 }
 

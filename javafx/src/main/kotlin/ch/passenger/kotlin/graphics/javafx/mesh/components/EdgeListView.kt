@@ -1,6 +1,7 @@
 package ch.passenger.kotlin.graphics.javafx.mesh.components
 
 import ch.passenger.kotlin.graphics.javafx.mesh.canvas.FXMeshCanvas
+import ch.passenger.kotlin.graphics.javafx.util.fromEvents
 import ch.passenger.kotlin.graphics.mesh.HalfEdge
 import javafx.collections.FXCollections
 import javafx.collections.ListChangeListener
@@ -14,7 +15,6 @@ import javafx.scene.input.MouseEvent
 class EdgeListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<HalfEdge<H, V, F>>(FXCollections.observableList(canvas.mesh.edges.toList())) {
     val addhandler: (HalfEdge<H, V, F>) -> Unit = { getItems().add(it) }
     val removehandler: (HalfEdge<H, V, F>) -> Unit = { getItems().remove(it) }
-    val dblClickObservers : MutableSet<(HalfEdge<H, V, F>)->Unit> = hashSetOf()
 
     init {
         getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE)
@@ -37,7 +37,8 @@ class EdgeListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<HalfEdge
                 addEventFilter(MouseEvent.MOUSE_CLICKED) {
                     if(it.getButton()== MouseButton.PRIMARY && it.getClickCount()==2) {
                         val lc = it.getSource() as ListCell<HalfEdge<H, V, F>>
-                        dblClickObservers.forEach { it(lc.getItem()) }
+                        if(lc.getItem()!=canvas.mesh.NOEDGE)
+                        canvas.focus.set(lc.getItem())
                     }
                 }
             }

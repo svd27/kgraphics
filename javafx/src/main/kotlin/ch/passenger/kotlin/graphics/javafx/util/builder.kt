@@ -202,3 +202,12 @@ fun Parent.button(t:String, init:Button.()->Unit) : Button {
     return b
 }
 
+var Control.ttip : String?
+get() = if(getTooltip()==null) null else getTooltip().getText()
+set(v) {
+    if(getTooltip()==null) {
+        setTooltip(Tooltip())
+    }
+    getTooltip().setText(v)
+}
+
