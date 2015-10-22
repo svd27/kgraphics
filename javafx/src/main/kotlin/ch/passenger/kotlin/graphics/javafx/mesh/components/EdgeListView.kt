@@ -12,18 +12,18 @@ import javafx.scene.control.Tooltip
 import javafx.scene.input.MouseButton
 import javafx.scene.input.MouseEvent
 
-class EdgeListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<HalfEdge<H, V, F>>(FXCollections.observableList(canvas.mesh.edges.toList())) {
-    val addhandler: (HalfEdge<H, V, F>) -> Unit = { getItems().add(it) }
-    val removehandler: (HalfEdge<H, V, F>) -> Unit = { getItems().remove(it) }
+class EdgeListView<H:Any,V:Any,F:Any>(val canvas: FXMeshCanvas<H, V, F>) : ListView<HalfEdge<H, V, F>>(FXCollections.observableList(canvas.mesh.edges.toList())) {
+    val addhandler: (HalfEdge<H, V, F>) -> Unit = { items.add(it) }
+    val removehandler: (HalfEdge<H, V, F>) -> Unit = { items.remove(it) }
 
     init {
-        getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE)
+        selectionModel.selectionMode = SelectionMode.MULTIPLE
 
-        getSelectionModel().getSelectedItems().addListener(object: ListChangeListener<HalfEdge<H, V, F>> {
+        selectionModel.selectedItems.addListener(object: ListChangeListener<HalfEdge<H, V, F>> {
             override fun onChanged(c: ListChangeListener.Change<out HalfEdge<H, V, F>>) {
                 while(c.next()) {
-                    canvas.markedEdges.removeAll(c.getRemoved())
-                    canvas.markedEdges.addAll(c.getAddedSubList())
+                    canvas.markedEdges.removeAll(c.removed)
+                    canvas.markedEdges.addAll(c.addedSubList)
                 }
             }
         })
@@ -32,21 +32,21 @@ class EdgeListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<HalfEdge
         setCellFactory {object : ListCell<HalfEdge<H, V, F>>() {
 
             init {
-                setTooltip(Tooltip())
-                this.getText()
+                tooltip = Tooltip()
+                this.text
                 addEventFilter(MouseEvent.MOUSE_CLICKED) {
-                    if(it.getButton()== MouseButton.PRIMARY && it.getClickCount()==2) {
-                        val lc = it.getSource() as ListCell<HalfEdge<H, V, F>>
-                        if(lc.getItem()!=canvas.mesh.NOEDGE)
-                        canvas.focus.set(lc.getItem())
+                    if(it.button == MouseButton.PRIMARY && it.clickCount ==2) {
+                        val lc = it.source as ListCell<HalfEdge<H, V, F>>
+                        if(lc.item !=canvas.mesh.NOEDGE)
+                        canvas.focus.set(lc.item)
                     }
                 }
             }
             override fun updateItem(item: HalfEdge<H, V, F>?, empty: Boolean) {
                 super.updateItem(item, empty)
                 if(item!=null) {
-                    getTooltip().setText("n: ${item.next} p: ${item.previous} f: ${item.left}")
-                    setText("$item")
+                    tooltip.text = "n: ${item.next} p: ${item.previous} f: ${item.left}"
+                    text = "$item"
                 }
             }
         }}

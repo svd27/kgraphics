@@ -16,7 +16,6 @@ import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.reflect.jvm.java
 
 /**
  * Created by svd on 05/05/2015.
@@ -24,12 +23,12 @@ import kotlin.reflect.jvm.java
 class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0) {
     val log = LoggerFactory.getLogger(Octree::class.java)
     inner abstract class Node(val extent:AlignedCube) {
-        abstract fun plus(v: Vertex<H, V, F>) : Node
-        abstract fun minus(v: Vertex<H, V, F>) : Node
-        abstract fun plus(e: HalfEdge<H, V, F>) : Node
-        abstract fun minus(e: HalfEdge<H, V, F>) : Node
-        abstract fun plus(f: Face<H, V, F>) : Node
-        abstract fun minus(f: Face<H, V, F>) : Node
+        operator abstract fun plus(v: Vertex<H, V, F>) : Node
+        operator abstract fun minus(v: Vertex<H, V, F>) : Node
+        operator abstract fun plus(e: HalfEdge<H, V, F>) : Node
+        operator abstract fun minus(e: HalfEdge<H, V, F>) : Node
+        operator abstract fun plus(f: Face<H, V, F>) : Node
+        operator abstract fun minus(f: Face<H, V, F>) : Node
         abstract val nvertices : Int
         abstract val nedges : Int
         abstract val nfaces : Int
@@ -51,7 +50,7 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
         override val nedges: Int get() = edges.size()
         override val nfaces: Int get() = faces.size()
 
-        override fun plus(v: Vertex<H, V, F>): Node {
+        operator override fun plus(v: Vertex<H, V, F>): Node {
             vertices add v
             return extend()
         }
@@ -61,7 +60,7 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
             return this
         }
 
-        override fun plus(e: HalfEdge<H, V, F>): Node {
+        operator override fun plus(e: HalfEdge<H, V, F>): Node {
             edges add e
             return extend()
         }
@@ -71,7 +70,7 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
             return this
         }
 
-        override fun plus(f: Face<H, V, F>): Node {
+        operator override fun plus(f: Face<H, V, F>): Node {
             faces add f
             return extend()
         }
@@ -124,17 +123,17 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
         override val edges: Iterable<HalfEdge<H, V, F>> get() = children.flatMap { it.edges }.distinct()
         override val faces: Iterable<Face<H, V, F>> get() = children.flatMap { it.faces }.distinct()
 
-        override fun plus(v: Vertex<H, V, F>): Node {
+        operator override fun plus(v: Vertex<H, V, F>): Node {
             children.filter { v.v in it.extent }.forEach { it+v }
             return this
         }
 
-        override fun plus(e: HalfEdge<H, V, F>): Node {
+        operator override fun plus(e: HalfEdge<H, V, F>): Node {
             children.filter { e in it.extent }.forEach { it+e }
             return this
         }
 
-        override fun plus(f: Face<H, V, F>): Node {
+        operator override fun plus(f: Face<H, V, F>): Node {
             children.filter { f in it.extent }.forEach { it+f }
             return this
         }
@@ -319,7 +318,7 @@ class Octree<H,V,F>(extent:AlignedCube, val cellLoad:Int, val collapseLoad:Int=0
         }
     }
 
-    fun vat(v:VectorF) : Vertex<H,V,F>? = query { root.vat(v) }
+    fun vat(v: VectorF) : Vertex<H,V,F>? = query { root.vat(v) }
 
     fun find(hotzone:AlignedCube) : Result<H,V,F>  = query { root.find(hotzone) }
     fun findEdges(hotzone:AlignedCube) : Iterable<HalfEdge<H,V,F>> = query { root.findEdges(hotzone) }

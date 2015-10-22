@@ -47,8 +47,8 @@ class FXMain() : Application() {
         val sp = ScrollPane(canvas)
         sp.setPrefSize(400.0, 400.0)
         val bp = BorderPane()
-        bp.setCenter(sp)
-        bp.setBottom(MeshCanvasStatusline(canvas))
+        bp.center = sp
+        bp.bottom = MeshCanvasStatusline(canvas)
         val meshItemsAccordion = MeshItemsAccordion(canvas)
         val vertexListView = meshItemsAccordion.vertexListView
         val edgeListView = meshItemsAccordion.edgeListView
@@ -56,21 +56,21 @@ class FXMain() : Application() {
         val lblV0 = Label("v0:    ")
         val lblV1 = Label("v1:    ")
         val bmem = Button("v->")
-        bmem.setOnAction { vertexListView.getSelectionModel().getSelectedItems().forEach { vertexBuffer.push(it) }
+        bmem.setOnAction { vertexListView.selectionModel.selectedItems.forEach { vertexBuffer.push(it) }
             if(vertexBuffer[0]!=null) {
-                lblV0.setText("v0: ${vertexBuffer[0]!!.id}")
+                lblV0.text = "v0: ${vertexBuffer[0]!!.id}"
             }
             if(vertexBuffer[1]!=null) {
-                lblV1.setText("v1: ${vertexBuffer[1]!!.id}")
+                lblV1.text = "v1: ${vertexBuffer[1]!!.id}"
             }
         }
         vertexListView.dblClickObservers add {
             vertexBuffer.push(it)
             if(vertexBuffer[0]!=null) {
-                lblV0.setText("v0: ${vertexBuffer[0]!!.id}")
+                lblV0.text = "v0: ${vertexBuffer[0]!!.id}"
             }
             if(vertexBuffer[1]!=null) {
-                lblV1.setText("v1: ${vertexBuffer[1]!!.id}")
+                lblV1.text = "v1: ${vertexBuffer[1]!!.id}"
             }
         }
         val bedge = Button("v->e")
@@ -85,31 +85,31 @@ class FXMain() : Application() {
 
 
         val left = VBox(meshItemsAccordion, HBox(bmem), HBox(lblV0, lblV1), bedge)
-        bp.setLeft(left)
-        bp.setTop(toolBar())
+        bp.left = left
+        bp.top = toolBar()
         //val svgf = SVGFontViewer(loadFont()!!)
         //val scene = Scene(svgf, 400.0, 400.0)
         val scene = Scene(bp, 400.0, 400.0)
-        primaryStage.setScene(scene)
+        primaryStage.scene = scene
         primaryStage.show()
     }
 
     private fun bottom(): HBox {
         val stx = TextField()
         stx.textProperty().bind(canvas.currentMouseTransformedX.asString("%.2f"))
-        stx.setEditable(false)
+        stx.isEditable = false
         val sty = TextField()
         sty.textProperty().bind(canvas.currentMouseTransformedY.asString("%.2f"))
-        sty.setEditable(false)
+        sty.isEditable = false
         val ctx = TextField()
         ctx.textProperty().bind(canvas.context.asString())
         val ctxNext = TextField()
         val ctxPrev = TextField()
         val ctxLeft = TextField()
         canvas.context.addListener { ov, oe, ne ->
-            ctxNext.setText("${ne.next}")
-            ctxPrev.setText("${ne.previous}")
-            ctxLeft.setText("${ne.left}")
+            ctxNext.text = "${ne.next}"
+            ctxPrev.text = "${ne.previous}"
+            ctxLeft.text = "${ne.left}"
         }
 
         val status = HBox(Label("X:"), stx, Label("Y:"), sty, Label("e:"), ctx, Label("n:"), ctxNext, Label("p:"), ctxPrev, Label("f:"), ctxLeft)
@@ -120,39 +120,39 @@ class FXMain() : Application() {
         val tb = ToolBar()
         val tbg = ToggleGroup()
         val bView = ToggleButton("View")
-        bView.setId(FXMeshCanvas.Modes.VIEW.name())
+        bView.id = FXMeshCanvas.Modes.VIEW.name()
         val bAddVertex = ToggleButton("v+")
-        bAddVertex.setId(FXMeshCanvas.Modes.ADDVERTEX.name())
+        bAddVertex.id = FXMeshCanvas.Modes.ADDVERTEX.name()
         val bRemoveVertex = ToggleButton("v-")
-        bRemoveVertex.setId(FXMeshCanvas.Modes.REMOVEVERTEX.name())
+        bRemoveVertex.id = FXMeshCanvas.Modes.REMOVEVERTEX.name()
         val bAddEdge = ToggleButton("e+")
-        bAddEdge.setId(FXMeshCanvas.Modes.ADDEDGE.name())
-        tbg.getToggles().addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
+        bAddEdge.id = FXMeshCanvas.Modes.ADDEDGE.name()
+        tbg.toggles.addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
         tbg.selectedToggleProperty().addListener { ov, told, tnew:Toggle? ->
-            val toggle = tbg.getSelectedToggle()
+            val toggle = tbg.selectedToggle
             if(toggle is ToggleButton) {
-                val m =FXMeshCanvas.Modes.valueOf(toggle.getId())
+                val m =FXMeshCanvas.Modes.valueOf(toggle.id)
                 if(canvas.mode.get()!=m) canvas.mode.set(m)
             }
         }
         canvas.mode.addListener { ov, mold, mnew ->
-            val toggle = tbg.getSelectedToggle()
+            val toggle = tbg.selectedToggle
             if(toggle is ToggleButton) {
-                if(toggle.getId()!=mnew.name()) {
-                    tbg.selectToggle(tbg.getToggles().first {it is ToggleButton && it.getId() == mnew.name()})
+                if(toggle.id !=mnew.name()) {
+                    tbg.selectToggle(tbg.toggles.first {it is ToggleButton && it.id == mnew.name()})
                 }
             }
         }
-        tbg.selectToggle(tbg.getToggles().first())
-        tb.getItems().addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
-        tb.getItems().add(Separator(Orientation.VERTICAL))
+        tbg.selectToggle(tbg.toggles.first())
+        tb.items.addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
+        tb.items.add(Separator(Orientation.VERTICAL))
         val angles = ToggleButton("|a"); angles.selectedProperty().bindBidirectional(canvas.lblangles)
         val vertices = ToggleButton("|v"); vertices.selectedProperty().bindBidirectional(canvas.lblvertices)
         val lnone = ToggleButton("| ")
         val lg = ToggleGroup()
-        lg.getToggles().addAll(lnone, vertices, angles)
-        lg.selectToggle(lg.getToggles()[0])
-        tb.getItems().addAll(lnone, vertices, angles)
+        lg.toggles.addAll(lnone, vertices, angles)
+        lg.selectToggle(lg.toggles[0])
+        tb.items.addAll(lnone, vertices, angles)
         return tb
     }
 
@@ -168,5 +168,5 @@ class FXMain() : Application() {
 
 
 fun main(args: Array<String>) {
-    Application.launch(javaClass<FXMain>(), *args)
+    Application.launch(FXMain::class.java, *args)
 }

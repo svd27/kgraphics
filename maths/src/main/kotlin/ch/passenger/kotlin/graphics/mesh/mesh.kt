@@ -3,8 +3,8 @@ package ch.passenger.kotlin.graphics.mesh
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
 import ch.passenger.kotlin.graphics.geometry.Triangle
 import ch.passenger.kotlin.graphics.math.LineSegment
-import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.math.MutableVectorF
+import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.trees.Octree
 import ch.passenger.kotlin.graphics.util.logging.d
 import ch.passenger.kotlin.graphics.util.logging.e
@@ -18,8 +18,8 @@ import java.util.*
  * Created by svd on 05/05/2015.
  */
 
-trait Vertex<H,V,F> {
-    val log : Logger get() = LoggerFactory.getLogger(javaClass<Vertex<H,V,F>>())
+interface  Vertex<H,V,F> {
+    val log : Logger get() = LoggerFactory.getLogger(Vertex::class.java)
     val id : Long
     val v: VectorF
     val data: V
@@ -77,7 +77,7 @@ trait Vertex<H,V,F> {
         }
     }
 }
-trait HalfEdge<H,V,F> {
+interface HalfEdge<H,V,F> {
     val origin : Vertex<H,V,F>
     val twin:HalfEdge<H,V,F>
     val destination : Vertex<H,V,F> get() = twin.origin
@@ -139,7 +139,7 @@ trait HalfEdge<H,V,F> {
     val sumCross : VectorF get() = if(!cycle) VectorF(origin.v.dimension) {Float.NaN} else
         this().map { it.cross }.fold<VectorF,VectorF>(VectorF(origin.v.dimension) {0f}) {acc, it -> acc+it}
 
-    fun contains(e:HalfEdge<H,V,F>) : Boolean = this().any { it==e }
+    operator fun contains(e:HalfEdge<H,V,F>) : Boolean = this().any { it==e }
     fun contains(v:Vertex<H,V,F>) : Boolean = this().any { it.origin==v }
 
     override fun equals(other: Any?): Boolean = if(other is HalfEdge<*,*,*>) other.key==key else false
@@ -176,10 +176,10 @@ trait HalfEdge<H,V,F> {
         return res
     }
 
-    val line:LineSegment get() = LineSegment.create(origin.v, destination.v)
+    val line: LineSegment get() = LineSegment.create(origin.v, destination.v)
 }
 
-trait Face<H,V,F> {
+interface Face<H,V,F> {
     open var name : String
     open val parent : Face<H,V,F>
     val id : Int
@@ -208,7 +208,7 @@ trait Face<H,V,F> {
     open val NOFACE : Face<H,V,F>
 }
 
-trait MeshDataFactory<H,V,F,C> {
+interface MeshDataFactory<H,V,F,C> {
     val context : C
     val faceFactory:Mesh<H,V,F>.(e:HalfEdge<H,V,F>,parent:Face<H,V,F>)->F
     val edgeFactory:Mesh<H,V,F>.(v0:Vertex<H,V,F>, v1:Vertex<H,V,F>)->H
@@ -248,7 +248,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
         override val mesh: Mesh<H, V, F>
             get() = this@Mesh
         override fun invoke(): Iterable<HalfEdge<H, V, F>> = emptyList()
-        override fun equals(other: Any?): Boolean = identityEquals(other)
+        override fun equals(other: Any?): Boolean = this === other
         override fun toString(): String = "NOVERTEX"
     }
     val NOEDGE = object : HalfEdge<H,V,F> {
@@ -272,7 +272,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
             get() = this
 
         override fun invoke(): Iterable<HalfEdge<H, V, F>> = emptyList()
-        override fun equals(other: Any?): Boolean = identityEquals(other)
+        override fun equals(other: Any?): Boolean = this === other
         override fun toString(): String = "NOEDGE"
     }
     val NOFACE = object : Face<H,V,F> {
@@ -289,7 +289,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
         override val properFace: Boolean get() = false
         override val triangles: Iterable<Triangle> get() = emptyList()
 
-        override fun equals(other: Any?): Boolean = identityEquals(other)
+        override fun equals(other: Any?): Boolean = this === other
         override fun toString(): String = "NOFACE"
     }
 
@@ -304,7 +304,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
             set(v) {}
         override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
         override val triangles: Iterable<Triangle> get() = emptyList()
-        override fun equals(other: Any?): Boolean = identityEquals(other)
+        override fun equals(other: Any?): Boolean = this === other
     }
 
 
@@ -321,7 +321,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
         var _twin : HalfEdge<H, V, F>? = null
         override val twin: HalfEdge<H, V, F> get() = _twin!!
         override var next: HalfEdge<H, V, F> = NOEDGE
-        set(v) {assert(v!=this && _twin!=null && (v==NOEDGE || v!=twin)); $next = v}
+        set(v) {assert(v!=this && _twin!=null && (v==NOEDGE || v!=twin)); field = v}
         override var left: Face<H, V, F> = NOFACE
 
         override val NOEDGE: HalfEdge<H, V, F> get() = this@Mesh.NOEDGE
@@ -329,8 +329,9 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
 
     private inner class MFace(override val parent: Face<H, V, F>, override val edge:HalfEdge<H, V, F>, override val data:F, name:String, override val id:Int=fids++) : Face<H,V,F> {
         override var name: String = name
-            get() = if($name.isEmpty()) "$id" else $name
-            set(v) {$name = v}
+            get() = if(field.isEmpty()) "$id" else field
+            set(v) {
+                field = v}
         override val NOFACE: Face<H, V, F> get() = this@Mesh.NOFACE
         override var hole: Boolean=if(parent!=NOFACE) parent.hole else false
 
@@ -423,7 +424,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
             return v
         }
 
-        return  vd.sortBy {VectorF.distance(vec, it.v)}.first()
+        return  vd.sortedBy { VectorF.distance(vec, it.v) }.first()
     }
 
 
@@ -518,7 +519,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
             }
             return
         }
-        val next = e.destination().filter { it!=e.twin && it!=NOEDGE }.sortBy {VectorF.angle3p(e.origin.v, e.destination.v, it.destination.v)}.firstOrNull()
+        val next = e.destination().filter { it!=e.twin && it!=NOEDGE }.sortedBy { VectorF.angle3p(e.origin.v, e.destination.v, it.destination.v) }.firstOrNull()
         if(next!=null) {
             if(next.cycle) {
                 if(e.origin in next)
@@ -530,7 +531,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
             e.next = next
             if(np!=NOEDGE) np.next=e.twin
         }
-        val prev = e.origin().filter { assert(it.origin==e.origin); it!=e }.map { it.twin }.sortBy {VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v)}.firstOrNull()
+        val prev = e.origin().filter { assert(it.origin==e.origin); it!=e }.map { it.twin }.sortedBy { VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v) }.firstOrNull()
         if(prev!=null && prev!=NOEDGE && e.previous==NOEDGE) {
             assert(prev!=e.twin)
             val pn = prev.next
@@ -539,7 +540,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
         }
         if(e.cycle && e.insideLooking && !e.left.properFace) {
             if(next!=null && next.left!=null && next.left.properFace) unlinkFace(next.left)
-            linkFace(e, next?.left?:NOFACE)
+            linkFace(e, next?.left!!)
         }
     }
 
@@ -562,7 +563,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
 
     fun gap(e:HalfEdge<H,V,F>, sp:HalfEdge<H,V,F>) {
         val prev = e.origin().filter { it!=e.twin && it!=NOEDGE && it!=this }.map{it.twin}.
-                sortBy {VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v)}.firstOrNull()
+                sortedBy { VectorF.angle3p(it.origin.v, e.origin.v, e.destination.v)}.firstOrNull()
         if(prev!=null) {
             if(prev.next!=NOEDGE) e.twin.next = prev.next
             prev.next = e
@@ -582,7 +583,7 @@ class Mesh<H,V,F>(extent:AlignedCube, public var dataFactory:MeshDataFactory<H,V
         }
         if(e.twin.left!=e.left && e.twin.cycle && !e.twin.left.properFace && e.twin.insideLooking) {
             log.d{"linking ${e.twin} with parent ${prev?.left}"}
-            linkFace(e.twin, prev?.left?:NOFACE, "BRIDGE(${if(parent.properFace)parent.name else ""}, ${e.twin.origin.id}->${e.twin.destination.id})")
+            linkFace(e.twin, prev?.left!!, "BRIDGE(${if(parent.properFace)parent.name else ""}, ${e.twin.origin.id}->${e.twin.destination.id})")
         }
     }
 

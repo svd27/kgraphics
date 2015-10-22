@@ -9,7 +9,7 @@ import org.testng.annotations.Test
  */
 
 class GeomTests {
-    Test
+    @Test
     fun testCubeIntersect() {
         val cube = AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1))
         val ray = Ray(VectorF(0, 0, -2), VectorF(0, 0, 2))

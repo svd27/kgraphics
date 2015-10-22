@@ -14,7 +14,7 @@ import javax.xml.stream.*
  * Created by svd on 05/05/2015.
  */
 class TestXML {
-    val log = LoggerFactory.getLogger(javaClass<TestXML>())
+    val log = LoggerFactory.getLogger(TestXML::class.java)
     data class Content(val id:Long, val storage:List<Int>, val fraction:Float) : XMLWritable<Content> {
         override fun writeXML(wr: XMLStreamWriter) {
             wr.writeStartElement(element)
@@ -58,12 +58,12 @@ class TestXML {
                         val n = r.attribute("name")
                         var cl: Iterable<Content>? = null
                         while (r.next() != XMLStreamConstants.END_ELEMENT) {
-                            when (r.getEventType()) {
+                            when (r.eventType) {
                                 XMLStreamConstants.START_ELEMENT -> {
-                                    if (r.getLocalName() == "contents") {
+                                    if (r.localName == "contents") {
                                         cl = XMLWriteableRegistry.readCollection(r, Content::class)
                                     } else {
-                                        XMLWriteableRegistry.gobble(r.getLocalName(), r)
+                                        XMLWriteableRegistry.gobble(r.localName, r)
                                     }
                                 }
                             }
@@ -76,7 +76,7 @@ class TestXML {
         }
     }
 
-    Test
+    @Test
     fun writeTest() {
         val c = Content(11L, listOf(1, 2, 3), 3.14f)
         val baos = ByteArrayOutputStream()
@@ -89,7 +89,7 @@ class TestXML {
         log.info("xml: $s")
     }
 
-    Test
+    @Test
     fun readTest() {
         val c = Content(11L, listOf(1, 2, 3), 3.14f)
         val baos = ByteArrayOutputStream()
@@ -106,7 +106,7 @@ class TestXML {
         read.forEach { assert(it is Content); log.info("el: $it")}
     }
 
-    Test
+    @Test
     fun deeptWrite() {
         val stuff = listOf(Stuff("one", listOf(Content(1L, listOf(2, 4, 6), 1f), Content(2L, listOf(1, 3, 5), 3.14f))),
                 Stuff("two", listOf(Content(3L, listOf(1, 2, 3, 5, 7, 11), 2.2f), Content(4L, listOf(13, 17, 19), 2.2f))))

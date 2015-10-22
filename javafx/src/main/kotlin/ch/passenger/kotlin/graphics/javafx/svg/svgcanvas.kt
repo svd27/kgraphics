@@ -37,16 +37,16 @@ class SVGCanvas(width:Double, height:Double) : Canvas(width, height) {
     }
 
     fun draw() {
-        val g = getGraphicsContext2D()
-        g.clearRect(0.0, 0.0, getWidth(), getHeight())
+        val g = graphicsContext2D
+        g.clearRect(0.0, 0.0, width, height)
 
         if(grid.get()) {
             g.save()
-            g.setStroke(Color.LIGHTGRAY)
-            val d :Double = getWidth()/gridw.get()
-            for(i in d..getWidth()) {
-                g.line(0f, i.toFloat(), getWidth().toFloat(), i.toFloat())
-                g.line(i.toFloat(), 0f, i.toFloat(), getHeight().toFloat())
+            g.stroke = Color.LIGHTGRAY
+            val d :Double = width /gridw.get()
+            for(i in d..width) {
+                g.line(0f, i.toFloat(), width.toFloat(), i.toFloat())
+                g.line(i.toFloat(), 0f, i.toFloat(), height.toFloat())
             }
             g.restore()
         }
@@ -71,7 +71,7 @@ class SVGCanvasScene(width:Double, height:Double, cw:Double=width, ch:Double=hei
         val path = TextField("                     ")
         path.textProperty().bindBidirectional(canvas.path)
         path.minWidth(50.0)
-        val bp = getRoot() as BorderPane
+        val bp = root as BorderPane
         bp.west {
             makeVbox {
                 this+chkFill
@@ -83,10 +83,10 @@ class SVGCanvasScene(width:Double, height:Double, cw:Double=width, ch:Double=hei
             makeHbox { this+"Path:"; this+path }
         }
         bp.center { makeScrollpane(canvas) }
-        val sp = bp.getCenter() as ScrollPane
+        val sp = bp.center as ScrollPane
         canvas.fromEvents(MouseEvent.MOUSE_MOVED).subscribe {
-            tx.setText("%.2f".format(it.getX()))
-            ty.setText("%.2f".format(it.getY()))
+            tx.text = "%.2f".format(it.x)
+            ty.text = "%.2f".format(it.y)
         }
     }
 }

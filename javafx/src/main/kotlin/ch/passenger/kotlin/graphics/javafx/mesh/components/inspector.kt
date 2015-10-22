@@ -25,37 +25,37 @@ import java.util.IllegalFormatConversionException
 /**
 * svd coded this on 11/05/2015.
 */
-class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
-    private val log = LoggerFactory.getLogger(javaClass<MeshInspector<H,V,F>>())
-    var e:HalfEdge<H,V,F> = canvas.mesh.NOEDGE
+class MeshInspector<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
+    private val log = LoggerFactory.getLogger(MeshInspector::class.java)
+    var e: HalfEdge<H, V, F> = canvas.mesh.NOEDGE
     set(v) {
-        $e = v
+        field = v
 
-        to.setText("${v.destination.v}")
-        from.setText("${v.origin.v}")
-        coords.getItems().clear()
-        id.setText("")
-        svg.setText("")
-        ia.setText(""); sia.setText(""); pi.setText(""); cross.setText(""); scross.setText("")
-        interpolate.setSelected(v in canvas.edgeHandlers && canvas.edgeHandlers[v]==interpolator)
-        interpolate.setDisable(true)
+        to.text = "${v.destination.v}"
+        from.text = "${v.origin.v}"
+        coords.items.clear()
+        id.text = ""
+        svg.text = ""
+        ia.text = ""; sia.text = ""; pi.text = ""; cross.text = ""; scross.text = ""
+        interpolate.isSelected = v in canvas.edgeHandlers && canvas.edgeHandlers[v]==interpolator
+        interpolate.isDisable = true
         interpolator = canvas.edgeHandlers[e]
         if(v!=canvas.mesh.NOEDGE) {
-            ia.setText("%.4f".format(v.innerAngle))
+            ia.text = "%.4f".format(v.innerAngle)
             ia.ttip = "%.4f".format(v.outerAngle)
 
-            cross.setText("%.4f".format(v.cross.z))
+            cross.text = "%.4f".format(v.cross.z)
             cross.ttip = "${v.cross}"
-            cycle.setSelected(v.cycle)
+            cycle.isSelected = v.cycle
             if(v.cycle) {
-                pi.setText("%.4f".format(v.piLaw))
-                sia.setText("%.4f".format(v.sumInnerAngles))
+                pi.text = "%.4f".format(v.piLaw)
+                sia.text = "%.4f".format(v.sumInnerAngles)
                 sia.ttip = "%.4f".format(v.sumOuterAngles)
-                if(scross.getTooltip()==null) {
-                    scross.setTooltip(Tooltip())
+                if(scross.tooltip ==null) {
+                    scross.tooltip = Tooltip()
                 }
                 try {
-                    scross.setText("%.4f".format(v.sumCross.z))
+                    scross.text = "%.4f".format(v.sumCross.z)
                 } catch(e: IllegalFormatConversionException) {
                     log.e(e){
                         "${v.sumCross.javaClass} vec : ${v.sumCross is VectorF} " +
@@ -63,33 +63,33 @@ class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
                                 "mvf: ${v.sumCross is MutableVectorF}"}
                 }
                 scross.ttip = "${v.sumCross}"
-                inner.setSelected(v.insideLooking)
+                inner.isSelected = v.insideLooking
 
             }
             val data = v.data
             when(data) {
                 is SVGPathMeshData -> {
                     val pe = data.pathElement
-                    coords.setItems(FXCollections.observableList(pe.coords.toList()))
-                    id.setText("${pe.id}")
-                    if(id.getTooltip()==null) {
-                        id.setTooltip(Tooltip())
+                    coords.items = FXCollections.observableList(pe.coords.toList())
+                    id.text = "${pe.id}"
+                    if(id.tooltip ==null) {
+                        id.tooltip = Tooltip()
                     }
-                    id.getTooltip().setText("coord offset ${data.coordOffset}")
-                    if(from.getTooltip()==null) {
-                        from.setTooltip(Tooltip())
+                    id.tooltip.text = "coord offset ${data.coordOffset}"
+                    if(from.tooltip ==null) {
+                        from.tooltip = Tooltip()
                     }
-                    from.getTooltip().setText("${data.origin}")
-                    if(to.getTooltip()==null) {
-                        to.setTooltip(Tooltip())
+                    from.tooltip.text = "${data.origin}"
+                    if(to.tooltip ==null) {
+                        to.tooltip = Tooltip()
                     }
-                    to.getTooltip().setText("${data.target}")
-                    svg.setText("${pe.svg}")
+                    to.tooltip.text = "${data.target}"
+                    svg.text = "${pe.svg}"
                     if(data.pathElement is SVGCurve) {
-                        interpolate.setDisable(false)
+                        interpolate.isDisable = false
                     }
                 }
-                is SVGReversePath -> svg.setText("reverse edge")
+                is SVGReversePath -> svg.text = "reverse edge"
             }
         }
     }
@@ -112,18 +112,18 @@ class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
         val cy = TableColumn<VectorF, Float>()
         val cz = TableColumn<VectorF, Float>()
         cx.setCellValueFactory {
-            ReadOnlyObjectWrapper(it.getValue().x)
+            ReadOnlyObjectWrapper(it.value.x)
         }
         cy.setCellValueFactory {
-            ReadOnlyObjectWrapper(it.getValue().y)
+            ReadOnlyObjectWrapper(it.value.y)
         }
         cz.setCellValueFactory {
-            ReadOnlyObjectWrapper(it.getValue().z)
+            ReadOnlyObjectWrapper(it.value.z)
         }
-        coords.getColumns().addAll(cx, cy, cz)
+        coords.columns.addAll(cx, cy, cz)
 
         canvas.focus.addListener { ov, oe, ne -> e = ne }
-        from.setEditable(false); to.setEditable(false);
+        from.isEditable = false; to.isEditable = false;
         var tfia : TextField? = null
         splitpane {
             vbox {
@@ -137,7 +137,7 @@ class MeshInspector<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : Pane() {
                 } }
                 hbox { this+"From:"; this+from; this+ makeLabel("To"); this+to }
                 hbox { this+cycle; this+inner; this+"\u03c0";this+pi }
-                hbox { label("ia:"); tfia=textfield { setText("00.0000"); }; this+"sum:";this+sia }
+                hbox { label("ia:"); tfia=textfield { text = "00.0000"; }; this+"sum:";this+sia }
                 hbox { this+"cross:"; this+cross; this+"sum:"; this+scross }
                 vbox { label("svg"); this+svg}
             }

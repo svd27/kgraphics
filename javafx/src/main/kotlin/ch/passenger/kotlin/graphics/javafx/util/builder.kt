@@ -12,23 +12,23 @@ import javax.swing.plaf.SplitPaneUI
 /**
  * svd coded this on 12/05/2015.
  */
-fun Parent.plus(n: Node) {
+operator fun Parent.plus(n: Node) {
     val me = this
     when(me) {
-        is Pane -> me.getChildren() add n
-        is SplitPane -> me.getItems() add n
-        is Group -> me.getChildren() add n
-        is MenuBar -> if(n is Menu) me.getMenus() add n else
+        is Pane -> me.children add n
+        is SplitPane -> me.items add n
+        is Group -> me.children add n
+        is MenuBar -> if(n is Menu) me.menus add n else
             throw UnsupportedOperationException("u cant add $n to a menubar")
-        is Menu -> if(n is MenuItem) me.getItems() add n else
+        is Menu -> if(n is MenuItem) me.items add n else
             throw UnsupportedOperationException("u cant add $n to a menu")
         else -> throw UnsupportedOperationException("plus not supported for parent $this ${this.javaClass}")
     }
 }
 
 
-fun Pane.plus(n: Node) = getChildren().add(n)
-fun Parent.plus(t:String) : Label {
+operator fun Pane.plus(n: Node) = children.add(n)
+operator fun Parent.plus(t:String) : Label {
     val label = Label(t)
     this+label
     return label
@@ -101,11 +101,11 @@ fun Parent.vbox(init: VBox.()->Unit) : VBox {
 }
 
 
-fun BorderPane.west(action:BorderPane.()->Node) = setLeft(this.action())
-fun BorderPane.east(action:BorderPane.()->Node) = setRight(this.action())
-fun BorderPane.north(action:BorderPane.()->Node) = setTop(this.action())
-fun BorderPane.south(action:BorderPane.()->Node) = setBottom(this.action())
-fun BorderPane.center(action:BorderPane.()->Node) = setCenter(this.action())
+fun BorderPane.west(action:BorderPane.()->Node) = {left = this.action()}
+fun BorderPane.east(action:BorderPane.()->Node) = {right = this.action()}
+fun BorderPane.north(action:BorderPane.()->Node) = {top = this.action()}
+fun BorderPane.south(action:BorderPane.()->Node) = {bottom = this.action()}
+fun BorderPane.center(action:BorderPane.()->Node) = {center = this.action()}
 fun borderpane(init:BorderPane.()->Unit) : BorderPane {
     val bp = BorderPane()
     bp.init()
@@ -155,9 +155,9 @@ fun Parent.accordion(init:Accordion.()->Unit) : Accordion {
 
 fun Accordion.pane(t:String, init:TitledPane.()->Unit) : TitledPane{
     val tp = TitledPane()
-    tp.setText(t)
+    tp.text = t
     tp.init()
-    getPanes() add tp
+    panes add tp
     return tp
 }
 
@@ -165,21 +165,21 @@ fun Accordion.pane(t:String, init:TitledPane.()->Unit) : TitledPane{
 fun MenuBar.menu(title:String, init:Menu.()->Unit) : Menu {
     val m = Menu(title)
     m.init()
-    getMenus().add(m)
+    menus.add(m)
     return m
 }
 
 fun Menu.item(title:String, init:MenuItem.()->Unit) : MenuItem {
     val mi = MenuItem(title)
     mi.init()
-    getItems().add(mi)
+    items.add(mi)
     return mi
 }
 
 fun Menu.check(title:String, init:CheckMenuItem.()->Unit) : MenuItem {
     val mi = CheckMenuItem(title)
     mi.init()
-    getItems().add(mi)
+    items.add(mi)
     return mi
 }
 
@@ -203,11 +203,11 @@ fun Parent.button(t:String, init:Button.()->Unit) : Button {
 }
 
 var Control.ttip : String?
-get() = if(getTooltip()==null) null else getTooltip().getText()
+get() = if(tooltip ==null) null else tooltip.text
 set(v) {
-    if(getTooltip()==null) {
-        setTooltip(Tooltip())
+    if(tooltip ==null) {
+        tooltip = Tooltip()
     }
-    getTooltip().setText(v)
+    tooltip.text = v
 }
 

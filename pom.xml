@@ -15,7 +15,7 @@
 
     <properties>
         <graphics.version>0.1-SNAPSHOT</graphics.version>
-        <kotlin.version>0.11.91</kotlin.version>
+        <kotlin.version>0.14.451</kotlin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <testng.version>6.8.21</testng.version>
     </properties>

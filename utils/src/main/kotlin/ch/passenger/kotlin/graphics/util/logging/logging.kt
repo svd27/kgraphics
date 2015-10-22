@@ -21,7 +21,7 @@ fun Logger.dm(m:Marker, vararg args:Any, p:Logger.()->String) {
 
 fun Logger.d(vararg args:Any, p:Logger.()->String) {
     if(args.size()>0 && args.first() is Marker) dm(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
-    else if(isDebugEnabled()) {
+    else if(isDebugEnabled) {
         debug(p(), *args)
     }
 }
@@ -35,7 +35,7 @@ fun Logger.im(m:Marker, vararg args:Any, p:Logger.()->String) {
 
 fun Logger.i(vararg args:Any, p:Logger.()->String) {
     if(args.size()>0 && args.first() is Marker) im(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
-    else if(isInfoEnabled()) {
+    else if(isInfoEnabled) {
         info(p(), *args)
     }
 }
@@ -48,7 +48,7 @@ fun Logger.wm(m:Marker, vararg args:Any, p:Logger.()->String) {
 
 fun Logger.w(vararg args:Any, p:Logger.()->String) {
     if(args.size()>0 && args.first() is Marker) wm(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
-    else if(isWarnEnabled()) {
+    else if(isWarnEnabled) {
         warn(p(), *args)
     }
 }
@@ -61,7 +61,7 @@ fun Logger.em(m:Marker, vararg args:Any, p:Logger.()->String) {
 
 fun Logger.e(vararg args:Any, p:Logger.()->String={""}) {
     if(args.size()>0 && args.first() is Marker) em(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
-    else if(isErrorEnabled()) {
+    else if(isErrorEnabled) {
         error(p(), *args)
     }
 }
@@ -74,7 +74,7 @@ fun Logger.tm(m:Marker, vararg args:Any, p:Logger.()->String) {
 
 fun Logger.t(vararg args:Any, p:Logger.()->String) {
     if(args.size()>0 && args.first() is Marker) tm(args.first() as Marker, *(args.copyOfRange(1, args.size())), p = p)
-    if(isTraceEnabled()) {
+    if(isTraceEnabled) {
         trace(p(), *args)
     }
 }

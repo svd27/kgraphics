@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory
  * Created by svd on 05/05/2015.
  */
 class AlignedCube(val min: VectorF, val max: VectorF) {
-    val log = LoggerFactory.getLogger(AlignedCube.javaClass)
+    val log = LoggerFactory.getLogger(AlignedCube::class.java)
     init {
         assert(min.dimension==max.dimension&&min.dimension==3)
         assert(min().zip(max()).all { it.first<=it.second }) {"badly defined boundaries: $min>$max"}
@@ -33,19 +33,19 @@ class AlignedCube(val min: VectorF, val max: VectorF) {
             tlf, trf, tlb,  trb
     )
 
-    public fun contains(v:VectorF) : Boolean = v().zip(min()).all { it.first >= it.second } && v().zip(max()).all { it.first <= it.second }
-    public fun contains(v:LineSegment) : Boolean {
+    operator public fun contains(v:VectorF) : Boolean = v().zip(min()).all { it.first >= it.second } && v().zip(max()).all { it.first <= it.second }
+    operator public fun contains(v: LineSegment) : Boolean {
         val ray = Ray(v.start, v.dir)
         val inter = intersect(ray, 0f, 1f)
         return inter!=NOPE && inter.type in setOf(IntersectionType.INTERSECT, IntersectionType.COINCIDENT) && (inter.t0 in 0f..1f || inter.t1 in 0f..1f)
     }
-    public fun contains(e:HalfEdge<*,*,*>) : Boolean = e.origin.v in this || e.destination.v in this  || e.line in this
-    public fun contains(f: Face<*, *, *>) : Boolean = f.edge().any { it.line in this } || f.triangles.any { it in this }
+    operator public fun contains(e: HalfEdge<*, *, *>) : Boolean = e.origin.v in this || e.destination.v in this  || e.line in this
+    operator public fun contains(f: Face<*, *, *>) : Boolean = f.edge().any { it.line in this } || f.triangles.any { it in this }
     public fun intersects(c: AlignedCube) : Boolean = c.min in this || c.max in this || min in c || max in c
     public fun contains(c: AlignedCube) : Boolean = c.min in this && c.max in this
     //cf: http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox3.txt
     //TODO: check if this works
-    public fun contains(t:Triangle) : Boolean {
+    operator public fun contains(t:Triangle) : Boolean {
         val v0 = t.p0 - center
         val v1 = t.p1 - center
         val v2 = t.p2 - center
@@ -183,13 +183,13 @@ class AlignedCube(val min: VectorF, val max: VectorF) {
     }
 
 
-    fun plus(v:VectorF) : AlignedCube {
+    operator fun plus(v:VectorF) : AlignedCube {
         val nmin = VectorF(min.dimension) {if(min[it]>v[it]) v[it] else min[it]}
         val nmax = VectorF(max.dimension) {if(max[it]<v[it]) v[it] else max[it]}
         return AlignedCube(nmin, nmax)
     }
-    fun plus(c:AlignedCube) : AlignedCube  = AlignedCube(VectorF(min.dimension) {Math.min(min[it], c.min[it])}, VectorF(max.dimension) {Math.max(max[it], c.max[it])})
-    fun minus(c: AlignedCube): AlignedCube =
+    operator fun plus(c:AlignedCube) : AlignedCube  = AlignedCube(VectorF(min.dimension) {Math.min(min[it], c.min[it])}, VectorF(max.dimension) {Math.max(max[it], c.max[it])})
+    operator fun minus(c: AlignedCube): AlignedCube =
             if (c intersects  this || this intersects  c)
                 AlignedCube(VectorF(min.dimension) { Math.max(min[it], c.min[it]) }, VectorF(max.dimension) { Math.min(max[it], c.max[it]) })
             else EMPTY

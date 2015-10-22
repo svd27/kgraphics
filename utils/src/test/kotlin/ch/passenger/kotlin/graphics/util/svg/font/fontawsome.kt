@@ -12,7 +12,7 @@ import java.nio.file.Paths
  * Created by svd on 07/05/2015.
  */
 class FontAwesomeTest {
-    Test
+    @Test
     fun testNameMapper() {
         val res = FontawesomeNameMapper::class.javaClass.getResourceAsStream("/fontawesome/_variables.scss")
         FontawesomeNameMapper(BufferedReader(InputStreamReader(res)))

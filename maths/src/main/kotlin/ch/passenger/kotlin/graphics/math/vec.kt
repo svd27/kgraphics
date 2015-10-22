@@ -20,15 +20,15 @@ import javax.xml.stream.events.XMLEvent
 fun Float.sqrt(): Float = Math.sqrt(this.toDouble()).toFloat()
 
 
-trait VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
+interface VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
     public val dimension:Int
     public val x : Float get() = get(0)
     public val y: Float  get() = this[1]
     public val z: Float  get() = this[2]
     public val w: Float  get() = this[3]
 
-    fun get(i:Int) : Float
-    fun invoke() : Iterable<Float> = Array(dimension) {this[it]}.toList()
+    operator fun get(i:Int) : Float
+    operator fun invoke() : Iterable<Float> = Array(dimension) {this[it]}.toList()
     override fun compareTo(other: VectorF): Int {
         if(dimension!=other.dimension) throw IllegalStateException("$dimension != ${other.dimension}")
         for(i in 0..dimension-1) {
@@ -38,15 +38,15 @@ trait VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
         return 0
     }
     fun toArray(): Array<Float> = Array(dimension) {this[it]}
-    fun times(f: Float): VectorF = VectorF(dimension) { this[it] * f }
-    fun minus(): VectorF = this*-1f
-    fun plus(v: VectorF): VectorF = VectorF(dimension) { this[it] + v[it] }
-    fun plus(f: Float): VectorF = VectorF(dimension) { this[it] + f }
-    fun minus(v: VectorF): VectorF = VectorF(dimension) { this[it] - v[it] }
-    fun minus(f: Float): VectorF = VectorF(dimension) { this[it] - f }
+    operator fun times(f: Float): VectorF = VectorF(dimension) { this[it] * f }
+    operator fun minus(): VectorF = this*-1f
+    operator fun plus(v: VectorF): VectorF = VectorF(dimension) { this[it] + v[it] }
+    operator fun plus(f: Float): VectorF = VectorF(dimension) { this[it] + f }
+    operator fun minus(v: VectorF): VectorF = VectorF(dimension) { this[it] - v[it] }
+    operator fun minus(f: Float): VectorF = VectorF(dimension) { this[it] - f }
     fun magnitude(): Float = this().map { it * it }.foldRight(0f) { l, r -> l + r }.sqrt()
-    fun times(v: VectorF): Float = this().merge(v()) { f1, f2 -> f1 * f2 }.foldRight(0f) { acc, c -> acc + c }
-    fun times(m:MatrixF) : MatrixF {
+    operator fun times(v: VectorF): Float = this().merge(v()) { f1, f2 -> f1 * f2 }.foldRight(0f) { acc, c -> acc + c }
+    operator fun times(m:MatrixF) : MatrixF {
         val row = MatrixF(1, dimension) {c, r -> this[r]}
         return row*m
     }
@@ -141,9 +141,9 @@ trait VectorF : Comparable<VectorF>, XMLWritable<VectorF> {
             return distance(p, proj)
         }
 
-        fun invoke(vararg ns:Number) : VectorF = ImmutableVectorF(*ns) as VectorF
-        fun invoke(d:Int, init:(Int)->Float) : VectorF = ImmutableVectorF(d, init) as VectorF
-        fun invoke(v:VectorF) : VectorF = ImmutableVectorF(v) as VectorF
+        operator fun invoke(vararg ns:Number) : VectorF = ImmutableVectorF(*ns)
+        operator fun invoke(d:Int, init:(Int)->Float) : VectorF = ImmutableVectorF(d, init)
+        fun invoke(v:VectorF) : VectorF = ImmutableVectorF(v)
 
 
         fun mix(a:VectorF, b:VectorF, t:Float) : VectorF = a.mix(b, t)
@@ -208,7 +208,7 @@ class MutableVectorF(dimension: Int, init: (Int) -> Float = { 0f }) : ImmutableV
 
     constructor(iv: VectorF) : this(iv.dimension, {iv[it]}) {}
 
-    fun set(i: Int, f: Float) = array.set(i, f)
+    operator fun set(i: Int, f: Float) = array.set(i, f)
     fun set(v: MutableVectorF) = assign(v)
     fun assign(v: MutableVectorF)  {
         assert(dimension==v.dimension)
@@ -223,7 +223,7 @@ class MutableVectorF(dimension: Int, init: (Int) -> Float = { 0f }) : ImmutableV
 }
 
 
-enum class IntersectionType {INTERSECT NOPE  COINCIDENT}
+enum class IntersectionType {INTERSECT, NOPE,  COINCIDENT}
 data open class Intersection(val incident: VectorF, val tray:Float, val tsegment:Float, val type:IntersectionType)
 val NOPE = object : Intersection(MutableVectorF(0, 0, 0), 0f, 0f, IntersectionType.NOPE) {}
 val PARALLEL = object : Intersection(MutableVectorF(0, 0, 0), 0f, 0f, IntersectionType.NOPE) {}
@@ -295,7 +295,7 @@ fun rayIntersect(O: VectorF, dir: VectorF, la : VectorF, lb: VectorF) : Intersec
 }
 
 
-trait LineSegment {
+interface LineSegment {
     val log : Logger get() = LoggerFactory.getLogger(this.javaClass)
     val start: VectorF; val end: VectorF
     val dir : VectorF get() = end-start
@@ -341,12 +341,12 @@ trait LineSegment {
         fun create(v0: VectorF,v1: VectorF) : LineSegment = object : LineSegment {
             override val start: VectorF = v0
             override val end: VectorF = v1
-            override fun toString(): String = super<LineSegment>.toString()
+            override fun toString(): String = super.toString()
         }
     }
 }
 
-trait Rectangle2D {
+interface Rectangle2D {
     val min: VectorF; val max: VectorF;
     val x : Float get() = min.x
     val y : Float get() = min.y
@@ -354,8 +354,8 @@ trait Rectangle2D {
     val h : Float get() = (max-min).y
     val center : VectorF get() = min + (max-min)*.5f
 
-    fun contains(v: VectorF) : Boolean = v.x in min.x..max.x && v.y in min.y..max.y
-    fun contains(r:Rectangle2D) : Boolean = r.min in this && r.max in this
+    operator fun contains(v: VectorF) : Boolean = v.x in min.x..max.x && v.y in min.y..max.y
+    operator fun contains(r:Rectangle2D) : Boolean = r.min in this && r.max in this
     fun intersects(r:Rectangle2D) : Boolean = min in r || max in r
     fun crossedBy(l:LineSegment) : Boolean = l.start in this || l.end in this || borders.any {
         val i = l.intersection2D(it)
@@ -363,7 +363,7 @@ trait Rectangle2D {
     }
     override fun equals(other: Any?): Boolean = if(other is Rectangle2D) other.min==min && other.max==max else false
 
-    fun plus(r: Rectangle2D) : Rectangle2D {
+    operator fun plus(r: Rectangle2D) : Rectangle2D {
         val minx = Math.min(min.x, r.min.x)
         val miny = Math.min(min.y, r.min.y)
         val maxx = Math.max(max.x, r.max.x)

@@ -11,8 +11,8 @@ import rx.subscriptions.Subscriptions
 /**
  * Created by svd on 08/05/2015.
  */
-fun<T:Any> Property<T>.invoke() : T = this.getValue()
-fun<T:Any> Property<T>.invoke(t:T)  = this.setValue(t)
+fun<T:Any> Property<T>.invoke() : T = this.value
+fun<T:Any> Property<T>.invoke(t:T)  = {this.value = t}
 
 fun<T: Event> Node.fromEvents(etype: EventType<T>) : Observable<T> = Observable.create (
         object : Observable.OnSubscribe<T> {

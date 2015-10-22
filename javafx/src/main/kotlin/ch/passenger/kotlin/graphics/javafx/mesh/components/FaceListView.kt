@@ -13,28 +13,28 @@ import javafx.scene.input.MouseButton
 import javafx.scene.input.MouseEvent
 import org.slf4j.LoggerFactory
 
-class FaceListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, V, F>>(FXCollections.observableList(canvas.mesh.faces.toList())) {
+class FaceListView<H:Any,V:Any,F:Any>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, V, F>>(FXCollections.observableList(canvas.mesh.faces.toList())) {
     private val log = LoggerFactory.getLogger(this.javaClass)
     val addhandler: (Face<H, V, F>) -> Unit = {
-        log.d{"items: was ${getItems().size()} -> ${canvas.mesh.faces.count()}"}
+        log.d{"items: was ${items.size()} -> ${canvas.mesh.faces.count()}"}
         setItems(FXCollections.observableList(canvas.mesh.faces.toList()))
     }
     val removehandler: (Face<H, V, F>) -> Unit = {
-        log.d{"items: was ${getItems().size()} -> ${canvas.mesh.faces.count()}"}
+        log.d{"items: was ${items.size()} -> ${canvas.mesh.faces.count()}"}
         setItems(FXCollections.observableList(canvas.mesh.faces.toList()))
     }
     val dblClickObservers : MutableSet<(Face<H, V, F>)->Unit> = hashSetOf()
 
     init {
-        getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE)
+        selectionModel.selectionMode = SelectionMode.MULTIPLE
 
-        getSelectionModel().getSelectedItems().addListener(object: ListChangeListener<Face<H, V, F>> {
+        selectionModel.selectedItems.addListener(object: ListChangeListener<Face<H, V, F>> {
             override fun onChanged(c: ListChangeListener.Change<out Face<H, V, F>>) {
                 while(c.next()) {
-                    canvas.markedFaces.removeAll(c.getRemoved())
-                    canvas.markedFaces.addAll(c.getAddedSubList())
+                    canvas.markedFaces.removeAll(c.removed)
+                    canvas.markedFaces.addAll(c.addedSubList)
                     canvas.markedEdges.clear()
-                    c.getAddedSubList().forEach {
+                    c.addedSubList.forEach {
                         canvas.markedEdges.addAll(it.edge())
                     }
                 }
@@ -45,20 +45,20 @@ class FaceListView<H,V,F>(val canvas: FXMeshCanvas<H, V, F>) : ListView<Face<H, 
         setCellFactory {object : ListCell<Face<H, V, F>>() {
 
             init {
-                setTooltip(Tooltip())
-                this.getText()
+                tooltip = Tooltip()
+                this.text
                 addEventFilter(MouseEvent.MOUSE_CLICKED) {
-                    if(it.getButton()== MouseButton.PRIMARY && it.getClickCount()==2) {
-                        val lc = it.getSource() as ListCell<Face<H, V, F>>
-                        dblClickObservers.forEach { it(lc.getItem()) }
+                    if(it.button == MouseButton.PRIMARY && it.clickCount ==2) {
+                        val lc = it.source as ListCell<Face<H, V, F>>
+                        dblClickObservers.forEach { it(lc.item) }
                     }
                 }
             }
             override fun updateItem(item: Face<H, V, F>?, empty: Boolean) {
                 super.updateItem(item, empty)
                 if(item!=null) {
-                    getTooltip().setText("${if(item.parent!=canvas.mesh.NOFACE) "p: ${item.parent}" else""} chain: ${item.edge().map { it.origin.id }.joinToString("->")}")
-                    setText("${item}")
+                    tooltip.text = "${if(item.parent!=canvas.mesh.NOFACE) "p: ${item.parent}" else""} chain: ${item.edge().map { it.origin.id }.joinToString("->")}"
+                    text = "${item}"
                 }
             }
         }}

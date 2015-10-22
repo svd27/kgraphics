@@ -5,7 +5,7 @@ import java.util.*
 /**
  * svd coded this on 15/05/2015.
  */
-class Hierarchy<T> {
+class Hierarchy<T:Any> {
     private class Node<T>(val value:T) {
         val children:MutableList<Node<T>> = arrayListOf()
 
@@ -31,7 +31,7 @@ class Hierarchy<T> {
             }
             return null
         }
-        fun contains(t:T) : Boolean {
+        operator fun contains(t:T) : Boolean {
             if(value==t) return true
             return children.any{t in it}
         }
@@ -146,7 +146,7 @@ class Hierarchy<T> {
 
     fun root() : List<T> = children.map { it.value }
     val size : Int get() = children.fold(children.size()) {acc, it -> acc+it.size}
-    fun contains(t:T) : Boolean = children.any {t in it}
+    operator fun contains(t:T) : Boolean = children.any {t in it}
 
     fun<U> collect(u:U, cb:(U,T)->U) {
         children.forEach{it.collect(u, cb)}

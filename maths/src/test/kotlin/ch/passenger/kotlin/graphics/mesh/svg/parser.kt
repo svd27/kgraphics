@@ -14,13 +14,12 @@ import org.parboiled.support.ParsingResult
 import org.slf4j.LoggerFactory
 import org.testng.annotations.Test
 import org.testng.AssertJUnit.*
-import kotlin.reflect.jvm.java
 
 /**
  * Created by svd on 10/05/2015.
  */
 class ParserTests {
-    val log = LoggerFactory.getLogger(javaClass<ParserTests>())
+    val log = LoggerFactory.getLogger(ParserTests::class.java)
     val xml = """
     <glyph unicode="&#xf00a;" horiz-adv-x="1792" d="M512 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 288v-192q0 -40 -28 -68t-68 -28h-320 q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM512 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 800v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28 h320q40 0 68 -28t28 -68zM1792 288v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1152 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 800v-192 q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68zM1792 1312v-192q0 -40 -28 -68t-68 -28h-320q-40 0 -68 28t-28 68v192q0 40 28 68t68 28h320q40 0 68 -28t28 -68z" />
     """
@@ -44,9 +43,9 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
 
         return res
     }
-    Test
+    @Test
     fun testNumbers() {
-        val parser = Parboiled.createParser(javaClass<SVGPathParser>())
+        val parser = Parboiled.createParser(SVGPathParser::class.java)
         val ai = "1234546"
         val si = "-1231234"
         val uf = ".2233e-4"
@@ -58,10 +57,10 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
         assertEquals(uf.toFloat(), res.elementAt(2).resultValue)
         assertEquals(sf.toFloat(), res.elementAt(3).resultValue)
     }
-    Test
+    @Test
     fun testCoords() {
-        val parser = Parboiled.createParser(javaClass<SVGPathParser>())
-        val lists = array(
+        val parser = Parboiled.createParser(SVGPathParser::class.java)
+        val lists = arrayOf(
                 "12 2", ".22, .33", "2,.33,-2-3 13 2"
         )
         val res = TracingParseRunner<Any>(parser.floatPairList()).all(*lists)
@@ -99,10 +98,10 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
         assertEquals(13f, v22.x); assertEquals(2f, v22.y)
     }
 
-    Test
+    @Test
     fun testMove() {
         val move1 = "M222 333"
-        val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
+        val svgp = Parboiled.createParser(SVGPathParser::class.java)
         val res = TracingParseRunner<SVGMove>(svgp.move()).run(move1)
         assert(res.resultValue is SVGMove)
         val m = res.resultValue
@@ -127,10 +126,10 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
     }
 
 
-    Test
+    @Test
     fun testPath() {
         val p1 = "M2 3l4 5c12 2,.33 .44, .3 -.1,13.2 3.8s12 2,3 4h12 23 13v.4-.2e1 3 4"
-        val parser = Parboiled.createParser(javaClass<SVGPathParser>())
+        val parser = Parboiled.createParser(SVGPathParser::class.java)
         val r1 = TracingParseRunner<SVGPath>(parser.path()).run(p1)
         assertEquals(0, r1.parseErrors.size())
         val sp1 = r1.resultValue
@@ -150,10 +149,10 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
             }
         }
     }
-    Test
+    @Test
     fun testPaths() {
         val p1 = "M2 3l4 5c12 2,.33 .44, .3 -.1,13.2 3.8s12 2,3 4h12 23 13v.4-.2e1 3 4"
-        val parser = Parboiled.createParser(javaClass<SVGPathParser>())
+        val parser = Parboiled.createParser(SVGPathParser::class.java)
         val r1 = TracingParseRunner<Iterable<SVGPath>>(parser.paths()).run(path1)
         dumpErrors(r1.parseErrors)
         assertEquals(0, r1.parseErrors.size())
@@ -162,10 +161,10 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
     }
 
 
-    Test
+    @Test
     fun testMoveMore() {
         val move1 = "M222 333-2 3.2e3"
-        val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
+        val svgp = Parboiled.createParser(SVGPathParser::class.java)
         val res = BasicParseRunner<SVGPath>(svgp.path()).run(move1)
         assertNotNull(res.resultValue)
         assert(res.resultValue is SVGPath, "res: ${res.resultValue.javaClass}")
@@ -178,27 +177,27 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
         log.debug(ParseTreeUtils.printNodeTree(res))
     }
 
-    Test
+    @Test
     fun stupid() {
         val x = listOf(Unit)
         val f = (x.first())
         val kc = Unit::class
-        javaClass<Unit>().getClasses().forEach { println("u: $it") }
-        javaClass<Any>().getClasses().forEach { println("a: $it") }
-        Unit::class.java.getClasses().forEach { println("u1: $it") }
-        Any::class.java.getClasses().forEach { println("a1: $it") }
-        Unit::class.javaClass.getClasses().forEach { println("u1: $it") }
-        Any::class.javaClass.getClasses().forEach { println("a1: $it") }
-        assert(javaClass<Any>().isAssignableFrom(javaClass<Unit>()))
+        Unit::class.java.classes.forEach { println("u: $it") }
+        Any::class.java.classes.forEach { println("a: $it") }
+        Unit::class.java.classes.forEach { println("u1: $it") }
+        Any::class.java.classes.forEach { println("a1: $it") }
+        Unit::class.javaClass.classes.forEach { println("u1: $it") }
+        Any::class.javaClass.classes.forEach { println("a1: $it") }
+        assert(Any::class.java.isAssignableFrom(Unit::class.java))
     }
 
-    Test
+    @Test
     fun paths() {
         val paths = """M3 2 4   1l2  3l3 4z M12 2 3 2z
         M4 1-4 3L23 3c1 2 3 4 5   6 7 8s12 2 13 4s.44 .22 .33 .44
         M0 0
         """
-        val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
+        val svgp = Parboiled.createParser(SVGPathParser::class.java)
         log.info("nlc: ${paths.filter { it=='\n' }.count()}")
         val res = BasicParseRunner<List<SVGPath>>(svgp.paths()).run(paths)
         if(res.parseErrors.size()>0) dumpErrors(res.parseErrors)
@@ -208,9 +207,9 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
         p.forEach { dumpPath(it) }
     }
 
-    Test
+    @Test
     fun dollar() {
-        val svgp = Parboiled.createParser(javaClass<SVGPathParser>())
+        val svgp = Parboiled.createParser(SVGPathParser::class.java)
         log.debug(dollar)
         log.info("nlc: ${dollar.filter { it=='\n' }.count()}")
         val res = BasicParseRunner<Iterable<SVGPath>>(svgp.paths()).run(dollar)
@@ -223,7 +222,7 @@ s-23.834 -12.667 -33.501 -21c-9.66699 -8.33594 -17.334 -18.1689 -23.001 -29.5c-5
     }
 
     fun dumpErrors(errs:Iterable<ParseError>) {
-        errs.forEach { log.error("${it.getErrorMessage()}: ${it.getInputBuffer().extract(it.getStartIndex(), it.getEndIndex())}") }
+        errs.forEach { log.error("${it.errorMessage}: ${it.inputBuffer.extract(it.startIndex, it.endIndex)}") }
     }
 
 }

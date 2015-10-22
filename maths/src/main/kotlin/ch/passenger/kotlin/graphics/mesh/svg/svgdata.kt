@@ -6,7 +6,6 @@ import ch.passenger.kotlin.graphics.geometry.Curve
 import ch.passenger.kotlin.graphics.geometry.QuadBezier
 import ch.passenger.kotlin.graphics.math.MutableVectorF
 import ch.passenger.kotlin.graphics.math.VectorF
-import ch.passenger.kotlin.graphics.mesh
 import ch.passenger.kotlin.graphics.mesh.*
 import ch.passenger.kotlin.graphics.util.logging.d
 import ch.passenger.kotlin.graphics.util.logging.t
@@ -24,12 +23,11 @@ import org.parboiled.support.Var
 import org.parboiled.support.DebuggingValueStack
 import org.slf4j.LoggerFactory
 import java.util.*
-import kotlin.reflect.jvm.java
 
 /**
  * Created by svd on 09/05/2015.
  */
-trait SVGMeshData {
+interface  SVGMeshData {
     var pred : SVGMeshData?
     val origin : VectorF
     val target:VectorF
@@ -85,7 +83,7 @@ trait SVGMeshData {
                 }
         }
 
-        fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, offset: Int, pred: SVGMeshData?): SVGMeshData {
+        operator fun invoke(paths: Iterable<SVGPath>, path: Int, idxPathelement: Int, offset: Int, pred: SVGMeshData?): SVGMeshData {
             val pe = paths.elementAt(path).elements[idxPathelement]
             return when (pe) {
                 is SVGQuad -> MDCurve(paths, path, idxPathelement, offset, pred)
@@ -120,9 +118,9 @@ trait SVGMeshData {
     }
 
 }
-trait SVGInserted : SVGMeshData
-trait SVGReversePath : SVGMeshData
-trait SVGPathMeshData : SVGMeshData {
+interface SVGInserted : SVGMeshData
+interface SVGReversePath : SVGMeshData
+interface SVGPathMeshData : SVGMeshData {
     val paths:Iterable<SVGPath>
     val pathIdx: Int
     val idxPathelement : Int
@@ -194,7 +192,7 @@ trait SVGPathMeshData : SVGMeshData {
     }
 }
 
-trait SVGCurveMeshData : SVGPathMeshData {
+interface SVGCurveMeshData : SVGPathMeshData {
     val curve : Curve
 }
 
@@ -203,7 +201,7 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
         createMesh(paths:Iterable<SVGPath>)  : Mesh<H,V,F> {
     val log = LoggerFactory.getLogger("SVG")
     if(log is ch.qos.logback.classic.Logger) {
-        log.setLevel(Level.TRACE)
+        log.level = Level.TRACE
     }
 
     val min = MutableVectorF(3) { Float.POSITIVE_INFINITY}
@@ -237,7 +235,7 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
             {
                 e, p -> SVGMeshData.reverse() as F
             })
-    val m = Mesh<H,V,F>(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), df)
+    val m = Mesh(AlignedCube(VectorF(-1, -1, -1), VectorF(1, 1, 1)), df)
 
     paths.forEachIndexed { idxp, path ->
         fun context() : PContext = m.dataFactory.context as PContext
@@ -260,7 +258,7 @@ fun<H:SVGMeshData,V:SVGMeshData,F:SVGMeshData>
                       return m.add(v)
                     else {
                         log.w{"$v ignored using existing ${verts}"}
-                        return verts.sortBy {VectorF.distance(v, it.v)}.first()
+                        return verts.sortedBy { VectorF.distance(v, it.v) }.first()
                     }
                 }
             }
@@ -374,12 +372,12 @@ class SVGPath(val elements:List<SVGPathElement>) {
 }
 
 fun parseSVGPath(d:String) : Iterable<SVGPath> {
-    val log = LoggerFactory.getLogger(javaClass<SVGPathParser>())
+    val log = LoggerFactory.getLogger(SVGPathParser::class.java)
     val parser = Parboiled.createParser(SVGPathParser::class.java)
     val res = BasicParseRunner<Iterable<SVGPath>>(parser.paths()).run(d)
     if(res.parseErrors.size()>0) {
         res.parseErrors.forEach {
-            log.error("${it.getErrorMessage()}")
+            log.error("${it.errorMessage}")
 
         }
         throw IllegalStateException()
@@ -473,9 +471,9 @@ open class SVGPathParser() : org.parboiled.BaseParser<Any>() {
 
     open fun debug(s:String="") : Boolean {
         val log = LoggerFactory.getLogger("PARSE")
-        val vs = getContext().getValueStack()
+        val vs = context.valueStack
         log.debug(s)
-        log.debug(getContext().getInputBuffer().extract(getContext().getMatchRange()))
+        log.debug(context.inputBuffer.extract(context.matchRange))
         vs.forEachIndexed {
             idx, it ->
             log.debug("$idx: $it")

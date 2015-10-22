@@ -5,19 +5,18 @@ import java.util.*
 import javax.xml.stream.XMLStreamConstants
 import javax.xml.stream.XMLStreamReader
 import javax.xml.stream.XMLStreamWriter
-import kotlin.reflect
 import kotlin.reflect.KClass
 
 
 /**
  * Created by svd on 05/05/2015.
  */
-trait XMLWritableFactory<T> {
+interface  XMLWritableFactory<T> {
     val name:String
     fun readXML(r:XMLStreamReader) : T
 }
 
-trait XMLWritable<T> {
+interface XMLWritable<T> {
     fun writeXML(wr:XMLStreamWriter)
 }
 
@@ -44,11 +43,11 @@ public object XMLWriteableRegistry {
     fun read(r:XMLStreamReader) : Iterable<Any> {
         val res = arrayListOf<Any>()
         while(r.next()!=XMLStreamConstants.END_DOCUMENT) {
-            when(r.getEventType()) {
+            when(r.eventType) {
                 XMLStreamConstants.START_ELEMENT -> {
-                    val n = r.getLocalName()
+                    val n = r.localName
                     val f = factories.values().firstOrNull { it.name==n }
-                    if(f!=null) res.add(f.readXML(r)) else if(n in toplevel) {
+                    if(f!=null) res.add(f.readXML(r)!!) else if(n in toplevel) {
                         res add readCollection(r, toplevel[n]!!)
                     }
                     else {
@@ -62,15 +61,15 @@ public object XMLWriteableRegistry {
     }
 
 
-    fun<T> readCollection(r:XMLStreamReader, kc:KClass<T>) : Iterable<T> {
+    fun<T:Any> readCollection(r:XMLStreamReader, kc:KClass<T>) : Iterable<T> {
         val res = arrayListOf<T>()
         val f = factories[kc]!!
         while(r.next()!=XMLStreamConstants.END_ELEMENT) {
-            when(r.getEventType()) {
+            when(r.eventType) {
                 XMLStreamConstants.START_ELEMENT -> {
-                    val n = r.getLocalName()
+                    val n = r.localName
 
-                    if(f.name==r.getLocalName()) res.add(f.readXML(r) as T) else {
+                    if(f.name==r.localName) res.add(f.readXML(r) as T) else {
                         gobble(n, r)
                     }
                 }
@@ -89,17 +88,17 @@ public object XMLWriteableRegistry {
 
 
     fun gobble(n:String, r:XMLStreamReader) {
-        log.warn("skipping ${r.getLocalName()}")
+        log.warn("skipping ${r.localName}")
         while(r.next()!=XMLStreamConstants.END_ELEMENT) {
-            if(r.getEventType()==XMLStreamConstants.START_ELEMENT) {
-                gobble(r.getLocalName(), r)
+            if(r.eventType ==XMLStreamConstants.START_ELEMENT) {
+                gobble(r.localName, r)
             }
         }
     }
 }
 
 fun XMLStreamReader.attributes(cb:(ns:String,n:String,v:String)->Unit) {
-    val c = getAttributeCount()-1
+    val c = attributeCount -1
     for(i in 0..c) {
         val ns = getAttributeNamespace(i)
         val n = getAttributeLocalName(i)
@@ -111,7 +110,7 @@ fun XMLStreamReader.attributes(cb:(ns:String,n:String,v:String)->Unit) {
 data class AttDesc(val ns:String?, val n:String, val v:String)
 
 val XMLStreamReader.attributes : Iterable<AttDesc> get() =
-    Array(getAttributeCount()) { i ->
+    Array(attributeCount) { i ->
         val ns = getAttributeNamespace(i)
         val n = getAttributeLocalName(i)
         val v = getAttributeValue(i)
@@ -128,7 +127,7 @@ fun xmlprocess(r:XMLStreamReader, init:XStreamProcessor.()->Unit) {
 }
 
 class  XStreamProcessor(val r:XMLStreamReader) {
-    val log = LoggerFactory.getLogger(javaClass<XStreamProcessor>())
+    val log = LoggerFactory.getLogger(XStreamProcessor::class.java)
     val elementHandlers :MutableMap<String,XStreamProcessor.(r:XMLStreamReader)->Any> = hashMapOf()
     var chars : XStreamProcessor.(r:XMLStreamReader)->Unit = {}
 
@@ -138,10 +137,10 @@ class  XStreamProcessor(val r:XMLStreamReader) {
     }
 
     fun gobble(n:String, r:XMLStreamReader) {
-        log.warn("skipping ${r.getLocalName()}")
+        log.warn("skipping ${r.localName}")
         while(r.next()!=XMLStreamConstants.END_ELEMENT) {
-            if(r.getEventType()==XMLStreamConstants.START_ELEMENT) {
-                gobble(r.getLocalName(), r)
+            if(r.eventType ==XMLStreamConstants.START_ELEMENT) {
+                gobble(r.localName, r)
             }
         }
     }
@@ -149,16 +148,16 @@ class  XStreamProcessor(val r:XMLStreamReader) {
 
     fun read() : Unit {
         while(r.next()!=XMLStreamConstants.END_DOCUMENT) {
-            when(r.getEventType()) {
+            when(r.eventType) {
                 XMLStreamConstants.START_ELEMENT -> {
-                    log.info("checking ${r.getLocalName()} -> ${elementHandlers[r.getLocalName()]}")
-                    val cb = elementHandlers[r.getLocalName()]
+                    log.info("checking ${r.localName} -> ${elementHandlers[r.localName]}")
+                    val cb = elementHandlers[r.localName]
                     if(cb!=null) cb(r)
                 }
                 XMLStreamConstants.CHARACTERS -> chars(r)
                 XMLStreamConstants.END_DOCUMENT -> return
             }
-            if(r.getEventType()==XMLStreamConstants.END_DOCUMENT) return
+            if(r.eventType ==XMLStreamConstants.END_DOCUMENT) return
         }
     }
 

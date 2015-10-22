@@ -123,7 +123,7 @@ class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
                 val containers = arrayListOf<HalfEdge<H,V,F>>()
                 containment.leveled { i, edge ->  if(i<maxl) containers add edge}
 
-                val mine = it.edge().map { it.origin }.sortBy {it.v[X]}.reverse()
+                val mine = it.edge().map { it.origin }.sortBy {it.v[X]}.reversed()
                 //val cycles = mesh.cycles { face.edge !in it() && it.insideLooking && it in containers}
 
                 containers.takeWhile {
@@ -135,7 +135,7 @@ class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
                     while(rest.size()>0 && !done) {
                         start = rest.first()
                         log.d{"start: $start"}
-                        rest = rest.drop(1).reverse()
+                        rest = rest.drop(1).reversed()
                         done = outside().map { it.origin }.any {
                             ov ->
                             log.d{"ov: $ov"}
@@ -168,7 +168,7 @@ class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
         val maxl = h.maxlevel
         fun cl(v1:Vertex<H,V,F>, v2:Vertex<H,V,F>) : LineSegment =
                 LineSegment.create(VectorF(v1.v[X], v1.v[Y], 0), VectorF(v2.v[X], v2.v[Y], 0))
-        val mine = f.edge().sortBy {it.destination.v[X]}
+        val mine = f.edge().sortedBy { it.destination.v[X] }
         val containers = arrayListOf<HalfEdge<H,V,F>>()
         h.leveled { i, edge ->  if(i<maxl) containers add edge}
         var closed = false
@@ -223,7 +223,7 @@ class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
     }
 
     enum class Monotonie {
-        START SPLIT MERGE END NORM
+        START, SPLIT, MERGE, END, NORM
     }
 
     val monotonyComparator : Comparator<Vertex<H,V,F>> = object: Comparator<Vertex<H, V, F>> {
@@ -246,7 +246,7 @@ class MeshOperations<H,V,F>(val mesh:Mesh<H,V,F>, val X:Int=0, val Y:Int=1) {
 
         val level = h.level(key)
         val holes = h.children(key)
-        val alledges = edge() + holes.flatMap { it() }.sortBy(object: Comparator<HalfEdge<H, V, F>> {
+        val alledges = edge() + holes.flatMap { it() }.sortedWith(object : Comparator<HalfEdge<H, V, F>> {
             override fun compare(o1: HalfEdge<H, V, F>?, o2: HalfEdge<H, V, F>?): Int {
                 return c.compare(o1?.origin, o2?.origin)
             }

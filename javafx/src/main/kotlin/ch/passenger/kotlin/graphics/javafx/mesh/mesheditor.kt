@@ -40,7 +40,7 @@ import kotlin.reflect.KClass
  */
 
 class MeshEditor() : Application() {
-    private val log = LoggerFactory.getLogger(javaClass<MeshEditor>())
+    private val log = LoggerFactory.getLogger(MeshEditor::class.java)
     override fun start(primaryStage: Stage) {
         val mb = menubar {
             useSystemMenuBarProperty().set(true)
@@ -50,57 +50,57 @@ class MeshEditor() : Application() {
                         val stage = Stage()
                         val mesh = Mesh<Unit,Unit,Unit >(AlignedCube.around(VectorF(0, 0, 0), 1f), MeshDataFactory.from(Unit,
                                 {v-> }, {v0,v1->}, {e, p -> }))
-                        stage.setScene(MeshScene(mesh, 1000.0, Unit::class, Unit::class, Unit::class, 600.0, 600.0))
+                        stage.scene = MeshScene(mesh, 1000.0, Unit::class, Unit::class, Unit::class, 600.0, 600.0)
                         stage.show()
                     }
                 }
                 item("Load SVG") {
                     setOnAction {
                         val fl = FileChooser()
-                        fl.getExtensionFilters().add(FileChooser.ExtensionFilter("SVG Font", "*.svg"))
+                        fl.extensionFilters.add(FileChooser.ExtensionFilter("SVG Font", "*.svg"))
                         val file = fl.showOpenDialog(primaryStage)
                         if(file!=null) {
                             val f = SVGFont.read(BufferedReader(FileReader(file)))
                             if (f!=null) {
-                                val l = ListView<SVGGlyph>(FXCollections.observableList(f.names.values().sortBy{it.name}))
+                                val l = ListView<SVGGlyph>(FXCollections.observableList(f.names.values().sortedBy { it.name }))
                                 l.setCellFactory {object : ListCell<SVGGlyph>() {
                                     init {
-                                        setTooltip(Tooltip())
-                                        this.getText()
+                                        tooltip = Tooltip()
+                                        this.text
                                     }
                                     override fun updateItem(item: SVGGlyph?, empty: Boolean) {
                                         super.updateItem(item, empty)
                                         if(item!=null) {
-                                            getTooltip().setText("${item.unicode} ${item.xadv}")
-                                            setText("${item.name}")
+                                            tooltip.text = "${item.unicode} ${item.xadv}"
+                                            text = "${item.name}"
                                         }
                                     }
                                 }}
                                 val taError = TextArea()
 
                                 val bopen = Button("Open")
-                                bopen.disableProperty().bind(l.getSelectionModel().selectedIndexProperty().lessThan(0))
+                                bopen.disableProperty().bind(l.selectionModel.selectedIndexProperty().lessThan(0))
                                 bopen.setOnAction {
-                                    val g = l.getSelectionModel().getSelectedItems()
-                                    taError.setText("")
+                                    val g = l.selectionModel.selectedItems
+                                    taError.text = ""
                                     g.forEach {
                                         try {
                                             taError.appendText(it.path)
                                             val ps = parseSVGPath(it.path)
                                             val klass = SVGMeshData::class
                                             val m = createMesh<SVGMeshData, SVGMeshData, SVGMeshData>(ps)
-                                            val ef:(v0: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>, v1: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>)->SVGMeshData =
+                                            val ef:(v0: Vertex<SVGMeshData, SVGMeshData, SVGMeshData>, v1: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>)->SVGMeshData =
                                                     {v0: Vertex<SVGMeshData,SVGMeshData,SVGMeshData>, v1: Vertex<SVGMeshData,SVGMeshData,SVGMeshData> -> SVGMeshData.reverse()}
                                             val med = MeshScene(m, 1000.0, kv = klass, ke = klass, kf = klass, width = 800.0, height = 600.0)
-                                            val stage = Stage(); stage.setTitle("${it.name}")
-                                            stage.setScene(med)
+                                            val stage = Stage(); stage.title = "${it.name}"
+                                            stage.scene = med
                                             stage.show()
                                         } catch(e:Exception) {
                                             log.e(e) {
                                                 "${it.name}:${it.unicode} {}"
                                             }
-                                            taError.setWrapText(true)
-                                            taError.setText("")
+                                            taError.isWrapText = true
+                                            taError.text = ""
                                             taError.appendText(it.path+"\n")
                                             taError.appendText(e.getMessage())
                                             taError.appendText("\n")
@@ -112,22 +112,22 @@ class MeshEditor() : Application() {
                                 }
                                 val bp = BorderPane()
                                 l.minWidthProperty().set(100.0)
-                                bp.setCenter(ScrollPane(l)); bp.setBottom(bopen); bp.setRight(taError)
+                                bp.center = ScrollPane(l); bp.bottom = bopen; bp.right = taError
                                 val scene = Scene(bp, 400.0, 200.0)
                                 val stage = Stage()
-                                stage.setTitle("Path Chooser ${file.getName()}")
-                                stage.setScene(scene)
+                                stage.title = "Path Chooser ${file.name}"
+                                stage.scene = scene
                                 stage.show()
                             }
                         }
                     }
                 }
-                item("SVG Plauyground") {
+                item("SVG Playground") {
                     setOnAction {
                         val scene = SVGCanvasScene(400.0, 400.0)
                         val stage = Stage()
-                        stage.setTitle("Play SVG")
-                        stage.setScene(scene)
+                        stage.title = "Play SVG"
+                        stage.scene = scene
                         stage.show()
                     }
                 }
@@ -139,14 +139,14 @@ class MeshEditor() : Application() {
         val flow = FlowPane(mb, bexit)
         val scene = Scene(flow, 50.0, 50.0, Color.TRANSPARENT)
 
-        primaryStage.setScene(scene)
-        primaryStage.setTitle("Main")
-        primaryStage.setX(0.0); primaryStage.setY(0.0)
+        primaryStage.scene = scene
+        primaryStage.title = "Main"
+        primaryStage.x = 0.0; primaryStage.y = 0.0
         primaryStage.show()
         //primaryStage.setIconified(true)
     }
 }
 
 fun main(args: Array<String>) {
-    Application.launch(javaClass<MeshEditor>(), *args)
+    Application.launch(MeshEditor::class.java, *args)
 }

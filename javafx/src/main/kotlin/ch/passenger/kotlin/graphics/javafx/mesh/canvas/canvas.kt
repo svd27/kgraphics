@@ -3,11 +3,11 @@ package ch.passenger.kotlin.graphics.javafx.mesh.canvas
 import ch.passenger.kotlin.graphics.geometry.AlignedCube
 import ch.passenger.kotlin.graphics.geometry.Circle
 import ch.passenger.kotlin.graphics.geometry.Triangle
-import ch.passenger.kotlin.graphics.math.LineSegment
 import ch.passenger.kotlin.graphics.math.MatrixF
+import ch.passenger.kotlin.graphics.javafx.util.*
+import ch.passenger.kotlin.graphics.math.LineSegment
 import ch.passenger.kotlin.graphics.math.Rectangle2D
 import ch.passenger.kotlin.graphics.math.VectorF
-import ch.passenger.kotlin.graphics.javafx.util.*
 import ch.passenger.kotlin.graphics.mesh.*
 import ch.passenger.kotlin.graphics.util.collections.RingBuffer
 import ch.passenger.kotlin.graphics.util.logging.d
@@ -40,7 +40,7 @@ import kotlin.reflect.KClass
 /**
  * Created by svd on 06/05/2015.
  */
-val log = LoggerFactory.getLogger(javaClass<FXMeshCanvas<*,*,*>>().getPackage().javaClass)
+val log = LoggerFactory.getLogger(FXMeshCanvas::class.java.`package`.javaClass)
 fun MatrixF.toFXAffine() : Affine {
     fun m(c:Int,r:Int) : Double = this[c,r].toDouble()
     log.debug("toFX: {}", this)
@@ -64,7 +64,7 @@ fun GraphicsContext.clear(v0:VectorF, v1:VectorF) {
     clearRect(v0.x.toDouble(), v0.y.toDouble(), wh.x.toDouble(), wh.y.toDouble())
 }
 
-fun GraphicsContext.line(ls:LineSegment) {
+fun GraphicsContext.line(ls: LineSegment) {
     line(ls.start, ls.end)
 }
 
@@ -73,10 +73,10 @@ fun<H,V,F> GraphicsContext.line(e:HalfEdge<H,V,F>) {
 }
 
 fun GraphicsContext.moveTo(p:Point2D) {
-    moveTo(p.getX(), p.getY())
+    moveTo(p.x, p.y)
 }
 fun GraphicsContext.lineTo(p:Point2D) {
-    lineTo(p.getX(), p.getY())
+    lineTo(p.x, p.y)
 }
 
 fun GraphicsContext.moveTo(p:VectorF) {
@@ -103,7 +103,7 @@ fun GraphicsContext.stroke(r:Rectangle2D) {
     closePath(); stroke()
 }
 
-fun GraphicsContext.fill(r:Rectangle2D) {
+fun GraphicsContext.fill(r: Rectangle2D) {
     beginPath()
     moveTo(r.min); lineTo(r.min.x.toDouble(), r.max.y.toDouble());
     lineTo(r.max); lineTo(r.max.x.toDouble(), r.min.y.toDouble())
@@ -135,16 +135,16 @@ fun GraphicsContext.stroke(r:Circle) {
 
 
 fun GraphicsContext.halfarrow(p1:Point2D, p2:Point2D, len:Double, angle:Double=35.0)  {
-    val dx = p2.getX()-p1.getX();
-    val dy = p2.getY()-p1.getY();
+    val dx = p2.x -p1.x;
+    val dy = p2.y -p1.y;
     //val len = p1.distance(p2)
 
     val theta = Math.atan2(dy, dx);
 
     val rad = Math.toRadians(angle); //35 angle, can be adjusted
     val arrowLength = len
-    val x = p2.getX() - arrowLength * Math.cos(theta + rad);
-    val y = p2.getY() - arrowLength * Math.sin(theta + rad);
+    val x = p2.x - arrowLength * Math.cos(theta + rad);
+    val y = p2.y - arrowLength * Math.sin(theta + rad);
 
     //val phi2 = Math.toRadians(-35.0);//-35 angle, can be adjusted
     //val x2 = p2.getX() - arrowLength * Math.cos(theta + phi2);
@@ -171,27 +171,27 @@ fun<H,V,F> GraphicsContext.fill(vararg vs:Vertex<H,V,F>) {
 }
 
 
-fun GraphicsContext.fill(text:String, v:VectorF) {
+fun GraphicsContext.fill(text:String, v: VectorF) {
     println("ft: $v")
-    val tp = getTransform().transform(v.x.toDouble(), v.y.toDouble())
+    val tp = transform.transform(v.x.toDouble(), v.y.toDouble())
     println("ft t: $tp")
     strokeText(text, v.x.toDouble(), v.y.toDouble())
     //fillText(text, v.x.toDouble(), v.y.toDouble())
 }
 
 val VectorF.p2d : Point2D get() = Point2D(x.toDouble(), y.toDouble())
-val Point2D.vec : VectorF get() = VectorF(getX(), getY(), 0)
+val Point2D.vec : VectorF get() = VectorF(x, y, 0)
 
-trait EdgeHandler<H,V,F> {
+interface EdgeHandler<H,V,F> {
     fun draw(e:HalfEdge<H,V,F>, g:GraphicsContext)
 }
 
 
-class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
+class FXMeshCanvas<H:Any,V:Any,F:Any>(val mesh: Mesh<H, V, F>, val minw:Double,
                           val kv:KClass<V>, val ke:KClass<H>, val kf:KClass<F>) : Canvas() {
-    private val log = LoggerFactory.getLogger(javaClass<FXMeshCanvas<H,V,F>>())
+    private val log = LoggerFactory.getLogger(FXMeshCanvas::class.java)
     enum class Modes {
-        ADDVERTEX REMOVEVERTEX VIEW ADDEDGE
+        ADDVERTEX, REMOVEVERTEX, VIEW, ADDEDGE
     }
     var inverse : Affine = Affine()
     val mode : ObjectProperty<Modes> = SimpleObjectProperty(Modes.VIEW)
@@ -217,13 +217,13 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
     val painters : ArrayList<GraphicsContext.()->Unit> = arrayListOf()
 
     init {
-        setFocusTraversable(true)
+        isFocusTraversable = true
         initTransform()
         zoom.addListener { ov, no, nn ->
             initTransform(); dirty()
         }
         fromEvents(ZoomEvent.ZOOM).subscribe {
-            zoom.set(it.getTotalZoomFactor())
+            zoom.set(it.totalZoomFactor)
         }
 
         mode.addListener { obv, om, nm ->
@@ -236,12 +236,12 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
         this.setOnMouseMoved {
             if(mode.get()==Modes.ADDEDGE) {
                 if(vbuffer.size==1) {
-                    val g2 = getGraphicsContext2D()
+                    val g2 = graphicsContext2D
                     g2.save()
-                    val tp = inverse.transform(it.getX(), it.getY())
+                    val tp = inverse.transform(it.x, it.y)
                     val v :VectorF = vbuffer[0]!!.v
-                    g2.setLineWidth(0.5*px)
-                    g2.setStroke(Color.LIGHTGRAY)
+                    g2.lineWidth = 0.5*px
+                    g2.stroke = Color.LIGHTGRAY
                     g2.setLineDashes(8.0, 2.0)
                     g2.moveTo(v.p2d); g2.lineTo(tp)
                     g2.stroke()
@@ -249,11 +249,11 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                 }
 
             }
-            val tp = inverse.transform(it.getX(), it.getY())
-            currentMouseTransformedX.set(tp.getX())
-            currentMouseTransformedY.set(tp.getY())
-            currentMouseX.set(it.getX())
-            currentMouseY.set(it.getY())
+            val tp = inverse.transform(it.x, it.y)
+            currentMouseTransformedX.set(tp.x)
+            currentMouseTransformedY.set(tp.y)
+            currentMouseX.set(it.x)
+            currentMouseY.set(it.y)
             val tpv = tp.vec
             //val hotzone = AlignedCube.around(tpv, hotzone.getValue().toFloat()*px.toFloat())
             val hotzone = hotzone(tpv)
@@ -263,7 +263,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
             transientMarksE.addAll(res.edges)
             transientMarksF.addAll(res.faces)
             if(res.edges.count()>0) {
-                context.set(res.edges.sortBy {VectorF.distance(tpos, it.origin.v)}.first())
+                context.set(res.edges.sortedBy { VectorF.distance(tpos, it.origin.v) }.first())
             } else if(context.get()!=focus.get()) context.set(focus.get())
             dirty()
         }
@@ -278,7 +278,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                     val hotzone = hotzone(tpos)
                     val e = mesh.findEdges(hotzone)
                     if(e.count()>0) {
-                        focus.setValue(e.sortBy{VectorF.distance(tpos, it.origin.v)}.first())
+                        focus.value = e.sortedBy { VectorF.distance(tpos, it.origin.v) }.first()
                     }
                 }
                 Modes.ADDVERTEX -> {
@@ -288,7 +288,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                     mesh.add(v)
                 }
                 Modes.ADDEDGE -> {
-                    if(it.getButton()== MouseButton.SECONDARY) vbuffer.clear()
+                    if(it.button == MouseButton.SECONDARY) vbuffer.clear()
                     else {
                         val hotzone = hotzone(tpos)
                         val vs = mesh.findVertices(hotzone)
@@ -307,7 +307,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
         }
 
         setOnKeyPressed {
-            if (it.getCode() == KeyCode.OPEN_BRACKET) {
+            if (it.code == KeyCode.OPEN_BRACKET) {
                 if (focus.get() != mesh.NOEDGE) {
                     val e = focus.get()
                     if (e.previous != e.NOEDGE) {
@@ -315,7 +315,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                     }
                 }
             }
-            if (it.getCode() == KeyCode.CLOSE_BRACKET) {
+            if (it.code == KeyCode.CLOSE_BRACKET) {
                 if (focus.get() != mesh.NOEDGE) {
                     val e = focus.get()
                     if (e.next != e.NOEDGE) {
@@ -323,7 +323,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                     }
                 }
             }
-            if (it.getCode() == KeyCode.T) {
+            if (it.code == KeyCode.T) {
                 if (focus.get() != mesh.NOEDGE) {
                     val e = focus.get()
                     if (e.twin != e.NOEDGE) {
@@ -331,21 +331,21 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
                     }
                 }
             }
-            if (it.getCode() == KeyCode.Q) {
+            if (it.code == KeyCode.Q) {
                 if (focus.get() != mesh.NOEDGE) {
                     val e = focus.get()
                     if (e.left.properFace) {
                         val p0 = e.previous.origin
                         val p1 = e.origin
                         val p2 = e.destination
-                        getGraphicsContext2D().fill(p0, p1, p2)
+                        graphicsContext2D.fill(p0, p1, p2)
                     }
                 }
             }
-            if(it.getCode()==KeyCode.SEMICOLON) {
+            if(it.code ==KeyCode.SEMICOLON) {
                 vertexWalker.walk()
             }
-            if(it.getCode()==KeyCode.COMMA) {
+            if(it.code ==KeyCode.COMMA) {
                 triangleWalker.walk()
             }
 
@@ -367,15 +367,15 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
     }
 
     fun hotzone(v:VectorF) : AlignedCube {
-        val w = VectorF(3) {if(it<2) hotzone.getValue().toFloat()*px.toFloat()/2 else 0f}
+        val w = VectorF(3) {if(it<2) hotzone.value.toFloat()*px.toFloat()/2 else 0f}
         return  AlignedCube(v-w, v+w)
     }
-    val px : Double get() = ((mesh.extent.max.x-mesh.extent.min.x)) / getWidth()
+    val px : Double get() = ((mesh.extent.max.x-mesh.extent.min.x)) / width
 
     fun initTransform() {
         val extent = mesh.extent
         log.d{"extent now: $extent"}
-        log.trace("${zoom.get()}: ${getWidth()}x${getHeight()}")
+        log.trace("${zoom.get()}: ${width}x${height}")
         val invy = if(invertY.get()) MatrixF.scale(VectorF(1, -1, 1)) else MatrixF.scale(1f)
         val tzoom = MatrixF.scale(zoom.get().toFloat())
         val zero = extent.min
@@ -388,9 +388,9 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
         val scale = tzero * invy * prescale *  tzoom
         val tmin = scale(extent.min); val tmax = scale(extent.max)
         val tr = Rectangle2D.create(tmin, tmax).scale(.1f)
-        setWidth(tr.w.toDouble());setHeight(Math.abs(tr.h.toDouble()))
+        width = tr.w.toDouble();height = Math.abs(tr.h.toDouble())
         log.d{"${extent.min}x${extent.max} -> ${tmin}x$tmax"}
-        log.d{"canvas wxh ${getWidth()}x${getHeight()}"}
+        log.d{"canvas wxh ${width}x${height}"}
         MatrixF.translate(-(tmin-tmax)*.05f-tmin)
 
         /*
@@ -405,8 +405,8 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
             MatrixF.translate(VectorF(v.x, Math.abs(tmax.y), v.z))
         } else  MatrixF.translate(-(tmin-tmax)*.05f-tmin)
         val complete = (scale * tcenter)
-        getGraphicsContext2D().setTransform(complete.toFXAffine())
-        inverse = getGraphicsContext2D().getTransform().createInverse()
+        graphicsContext2D.transform = complete.toFXAffine()
+        inverse = graphicsContext2D.transform.createInverse()
         dirty()
     }
 
@@ -414,17 +414,17 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
     fun dirty() {dirty = true}
 
 
-    val tpos : VectorF get() = VectorF(currentMouseTransformedX.getValue(), currentMouseTransformedY.getValue(), 0f)
+    val tpos : VectorF get() = VectorF(currentMouseTransformedX.value, currentMouseTransformedY.value, 0f)
     val nodepos :  VectorF get() = VectorF(currentMouseX.get(), currentMouseY.get(), 0f)
 
     fun selectMode() {
         vbuffer.clear()
         when(mode.get()) {
-            Modes.VIEW -> setCursor(Cursor.DEFAULT)
-            Modes.ADDVERTEX -> setCursor(Cursor.CROSSHAIR)
-            Modes.REMOVEVERTEX -> setCursor(Cursor.CROSSHAIR)
-            Modes.ADDEDGE -> setCursor(Cursor.MOVE)
-            else -> setCursor(Cursor.DEFAULT)
+            Modes.VIEW -> cursor = Cursor.DEFAULT
+            Modes.ADDVERTEX -> cursor = Cursor.CROSSHAIR
+            Modes.REMOVEVERTEX -> cursor = Cursor.CROSSHAIR
+            Modes.ADDEDGE -> cursor = Cursor.MOVE
+            else -> cursor = Cursor.DEFAULT
         }
     }
 
@@ -442,43 +442,43 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
     val currentMouseX : DoubleProperty = SimpleDoubleProperty()
     val currentMouseY : DoubleProperty = SimpleDoubleProperty()
     fun draw() {
-        val g = getGraphicsContext2D()
+        val g = graphicsContext2D
         g.save()
 
-        g.setFont(Font.font(16*px))
-        g.save(); g.setTransform(Affine()); g.clearRect(0.0, 0.0, getWidth(), getHeight()); g.restore()
-        g.setStroke(Color.DARKSLATEGRAY)
-        g.setLineWidth(px)
+        g.font = Font.font(16*px)
+        g.save(); g.transform = Affine(); g.clearRect(0.0, 0.0, width, height); g.restore()
+        g.stroke = Color.DARKSLATEGRAY
+        g.lineWidth = px
         g.line(mesh.extent.min.x, 0f, mesh.extent.max.x, 0f)
         g.line(0f, mesh.extent.min.y, 0f, mesh.extent.max.y)
-        g.setStroke(Color.BLACK)
+        g.stroke = Color.BLACK
         mesh.edges.forEach {
             draw(it, g)
         }
-        g.setStroke(Color.DODGERBLUE)
+        g.stroke = Color.DODGERBLUE
         markedVertices.forEach { g.strokeOval(it.v.x.toDouble()-2.5*px, it.v.y.toDouble()-2.5*px, 5*px, 5*px) }
         markedEdges.forEach {
             g.save()
-            g.setLineWidth(2*px)
-            g.setStroke(Color.DODGERBLUE)
+            g.lineWidth = 2*px
+            g.stroke = Color.DODGERBLUE
             draw(it, g)
         }
         markedFaces.forEach { g.save();
             val p : Paint = Color.DODGERBLUE.deriveColor(0.0, 1.0, 1.0, .5)
-            g.setFill(p)
+            g.fill = p
             g.fill(it)
             g.restore()
         }
-        g.setLineWidth(2*px)
-        g.setStroke(Color.BLUE)
+        g.lineWidth = 2*px
+        g.stroke = Color.BLUE
         val p : Paint = Color.BLUE.deriveColor(0.0, 1.0, 1.0, .5)
-        g.setFill(p)
+        g.fill = p
         transientMarksV.forEach { g.strokeOval(it.v.x.toDouble()-2.5*px, it.v.y.toDouble()-2.5*px, 5*px, 5*px) }
         transientMarksV.clear()
         transientMarksE.forEach {
-            g.setLineWidth(2*px)
+            g.lineWidth = 2*px
             draw(it, g)
-            g.setLineWidth(px)
+            g.lineWidth = px
             if(lblangles.get()) {
                 g.fill("%.2f".format(it.innerAngle), it.origin.v)
             }
@@ -491,11 +491,11 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
         //transientMarksF.forEach { g.fill(it) }
         transientMarksF.clear()
         if(focus.get()!=mesh.NOEDGE) {
-            g.setLineWidth(3*px)
-            g.setStroke(Color.FORESTGREEN)
+            g.lineWidth = 3*px
+            g.stroke = Color.FORESTGREEN
             val fe = focus.get()
             draw(fe, g)
-            g.setLineWidth(px)
+            g.lineWidth = px
             if(lblangles.get()) {
                 g.fill("%.2f".format(fe.innerAngle), fe.origin.v)
             }
@@ -533,7 +533,7 @@ class FXMeshCanvas<H,V,F>(val mesh: Mesh<H, V, F>, val minw:Double,
     fun cpx(n:Number) : Float = fpx()*n.toFloat()
 }
 
-class VertexWalker<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) {
+class VertexWalker<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) {
     var focus:HalfEdge<H,V,F>? = canvas.focus.get()
     var it:Iterator<HalfEdge<H,V,F>>? = null
     fun walk() {
@@ -553,7 +553,7 @@ class VertexWalker<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) {
     }
 }
 
-class TriangleWalker<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) {
+class TriangleWalker<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) {
     var focus:HalfEdge<H,V,F>? = canvas.focus.get()
     var it:Iterator<Triangle>? = null
     fun walk() {
@@ -568,9 +568,9 @@ class TriangleWalker<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) {
         val lit = it
         if(lit!=null && lit.hasNext()) {
             val t = lit.next()
-            val g2 = canvas.getGraphicsContext2D()
+            val g2 = canvas.graphicsContext2D
             g2.save()
-            g2.setFill(Color.AQUAMARINE.deriveColor(0.0, 1.0, 1.0, 0.6))
+            g2.fill = Color.AQUAMARINE.deriveColor(0.0, 1.0, 1.0, 0.6)
             g2.beginPath()
             g2.moveTo(t.p0)
             g2.lineTo(t.p1)

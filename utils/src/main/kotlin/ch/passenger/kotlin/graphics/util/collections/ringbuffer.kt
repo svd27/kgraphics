@@ -41,7 +41,7 @@ class RingBuffer<T>(val length:Int) : Iterable<T> {
         }
     }
 
-    fun get(idx:Int) : T? {
+    operator fun get(idx:Int) : T? {
         if(length==0) return null
         if(idx==0) return head!!.t
         var cn = head!!

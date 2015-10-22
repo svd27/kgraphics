@@ -31,7 +31,7 @@ class GlyphNode(font:SVGFont, name:String, size:Double=1.0) : Region() {
         prefHeightProperty().bind(canvas.heightProperty())
         widthProperty().addListener { ov, old, new ->
             val width = new.toDouble()
-            val height =getHeight()
+            val height = height
             if(width<height) {
                 val nz = width/canvas.glyph.get().xadv
                 //canvas.zoom.set(nz)
@@ -41,7 +41,7 @@ class GlyphNode(font:SVGFont, name:String, size:Double=1.0) : Region() {
             }
         }
         heightProperty().addListener { ov, old, new ->
-            val width = getWidth()
+            val width = width
             val height = new.toDouble()
             if(width<height) {
                 val nz = width/canvas.glyph.get().xadv
@@ -76,9 +76,9 @@ class GlyphCanvas(val font: SVGFont, name: String, size: Double = 3.0) : Canvas(
             val xa = if (glyph.get() != null) glyph.get().xadv else 1f
             boxw = xa + font.ems * .2
             boxh = font.ems + font.ems * .2
-            setWidth(new.toDouble() * boxw)
-            setHeight(new.toDouble() * boxh)
-            println("glyph ${getWidth()}x${getHeight()}")
+            width = new.toDouble() * boxw
+            height = new.toDouble() * boxh
+            println("glyph ${width}x${height}")
             draw()
         }
         color.addListener { value, c1, cn -> draw() }
@@ -94,16 +94,16 @@ class GlyphCanvas(val font: SVGFont, name: String, size: Double = 3.0) : Canvas(
     fun draw() {
         val g = glyph.get()
         if (g != null) {
-            val g2 = getGraphicsContext2D()
+            val g2 = graphicsContext2D
             g2.save()
-            g2.setFill(color.get())
+            g2.fill = color.get()
             g2.scale(1.0, 1.0)
-            g2.clearRect(0.0, 0.0, getWidth(), getHeight())
-            g2.setLineWidth(1.0)
+            g2.clearRect(0.0, 0.0, width, height)
+            g2.lineWidth = 1.0
             g2.scale(zoom.get(), -zoom.get())
             g2.translate(inset * zoom.get(), (-font.ems * 1.0 - font.descent - inset * zoom.get()))
             g2.beginPath()
-            g2.setLineWidth(30.0 / 14)
+            g2.lineWidth = 30.0 / 14
             g2.appendSVGPath(g.path)
             if (filled.get())
                 g2.fill() else g2.stroke()
@@ -121,8 +121,8 @@ class SVGFontViewer(font: SVGFont) : Region() {
         val canvas = GlyphCanvas(font, font.names.keySet().first())
 
 
-        list.getSelectionModel().getSelectedItems().addListener({ change: ListChangeListener.Change<out Any?> ->
-            change.getList().forEach {
+        list.selectionModel.selectedItems.addListener({ change: ListChangeListener.Change<out Any?> ->
+            change.list.forEach {
                 val sel = it.toString()
                 val g = font.names[sel]
                 canvas.glyph.set(g)
@@ -131,7 +131,7 @@ class SVGFontViewer(font: SVGFont) : Region() {
         })
 
         val slider : Slider = Slider(1.0/(font.ems), 2.0, 1.0)
-        slider.setShowTickLabels(true); slider.setShowTickMarks(true)
+        slider.isShowTickLabels = true; slider.isShowTickMarks = true
         slider.valueProperty().bindBidirectional(canvas.zoom)
 
         val spc = ScrollPane(canvas)
@@ -139,15 +139,15 @@ class SVGFontViewer(font: SVGFont) : Region() {
         spc.setPrefSize(400.0, 400.0)
         val tb = TextArea()
         tb.textProperty().bind(Bindings.select(canvas.glyph, "path"))
-        bp.setBottom(tb)
+        bp.bottom = tb
         val chkFill = CheckBox("Filled")
         chkFill.selectedProperty().bindBidirectional(canvas.filled)
         val colorPicker : ColorPicker = ColorPicker()
         colorPicker.valueProperty().bindBidirectional(canvas.color)
         val bnat = Button("1")
         val glyphNode = GlyphNode(font, "at", 1.0)
-        println("gn size: ${glyphNode.getWidth()}x${glyphNode.getHeight()}")
-        bnat.setGraphic(glyphNode)
+        println("gn size: ${glyphNode.width}x${glyphNode.height}")
+        bnat.graphic = glyphNode
         bnat.setOnAction {
             //println("${(bnat.getGraphic() as GlyphNode).getWidth()}x${(bnat.getGraphic() as GlyphNode).getHeight()} ${(bnat.getGraphic() as GlyphNode).size.get()}")
             canvas.naturalSize()
@@ -158,9 +158,9 @@ class SVGFontViewer(font: SVGFont) : Region() {
         lblSize.textProperty().bind(canvas.widthProperty().asString("%.2f").concat(canvas.heightProperty().asString("x%.2f")))
         val hbox = HBox(lblZoom, chkFill)
         val vb = VBox(ScrollPane(list), slider, hbox, colorPicker, bnat, lblSize)
-        bp.setLeft(vb)
-        bp.setCenter(spc)
-        getChildren() add bp
+        bp.left = vb
+        bp.center = spc
+        children add bp
         bp.prefHeightProperty().bind(this.heightProperty())
         bp.prefWidthProperty().bind(this.widthProperty())
     }

@@ -29,12 +29,12 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
         }
     }
 
-    fun get(c: Int, r: Int) : Float {
+    operator fun get(c: Int, r: Int) : Float {
         assert((c * rows + r)<m.size(), "$r $c = ${c * rows + r} ($rows, $cols)")
         //Mij = m[i+M*j]
         return m[c * rows + r]
     }
-    fun set(c: Int, r: Int, v: Float) {
+    operator fun set(c: Int, r: Int, v: Float) {
         assert((c * rows + r)<m.size(), "$r $c ${c * rows + r}")
         m[c * rows + r] = v
     }
@@ -44,7 +44,7 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     fun col(c:Int) : VectorF = VectorF(rows) {assert(c<cols, "$c col out of bounds $cols"); assert(it<rows, "$it row out $rows"); this[c, it]}
     fun col(c:Int, v: VectorF)  = (0..rows-1).forEach { this[c, it] = v[it] }
     fun get(c:Int) = col(c)
-    fun set(c:Int, v: VectorF) = col(c, v)
+    operator fun set(c:Int, v: VectorF) = col(c, v)
 
     constructor(m: MatrixF) : this(m.cols, m.rows, { c, r -> m[c, r] }) {}
     constructor(cols:Int, rows:Int, vararg va:Float) : this(cols, rows, {c,r -> va[c*rows+r]}) {}
@@ -62,7 +62,7 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
         res
     }
     */
-    fun times(that:MatrixF) : MatrixF = mul(that)
+    operator fun times(that:MatrixF) : MatrixF = mul(that)
 
     private fun mul(that:MatrixF) : MatrixF {
         assert(this.rows==that.cols)
@@ -91,7 +91,7 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     m20 m21 m22       v3      v1m20 + v2m21 + v3m22
     ]
      */
-    fun times(v: VectorF) : VectorF {
+    operator fun times(v: VectorF) : VectorF {
         val t = if(v.dimension==3) v.widen(1f) else v
         val res  = MutableVectorF(t.dimension) {0f}
         for(i in 0..t.dimension-1) {
@@ -103,7 +103,7 @@ class MatrixF(val cols:Int, val rows:Int,init:  (Int,Int) -> Float = { c, r -> i
     }
 
 
-    fun invoke(v: VectorF) : VectorF = (this*v)
+    operator fun invoke(v: VectorF) : VectorF = (this*v)
 
     fun transpose() : MatrixF = MatrixF(rows, cols) {c,r -> this[r,c]}
 

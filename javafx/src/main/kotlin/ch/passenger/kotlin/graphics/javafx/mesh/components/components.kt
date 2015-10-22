@@ -8,7 +8,6 @@ import ch.passenger.kotlin.graphics.javafx.mesh.canvas.stroke
 import ch.passenger.kotlin.graphics.javafx.util.*
 import ch.passenger.kotlin.graphics.math.MatrixF
 import ch.passenger.kotlin.graphics.math.Rectangle2D
-import ch.passenger.kotlin.graphics.math.VectorF
 import ch.passenger.kotlin.graphics.mesh.*
 import ch.passenger.kotlin.graphics.util.logging.d
 import javafx.geometry.Orientation
@@ -29,71 +28,71 @@ import kotlin.reflect.KClass
 /**
  * Created by svd on 09/05/2015.
  */
-class MeshCanvasToolbar<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : javafx.scene.control.ToolBar() {
+class MeshCanvasToolbar<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) : javafx.scene.control.ToolBar() {
     init {
         val tb = this
         val tbg = ToggleGroup()
         val bView = ToggleButton("View")
-        bView.setId(FXMeshCanvas.Modes.VIEW.name())
+        bView.id = FXMeshCanvas.Modes.VIEW.name()
         val bAddVertex = ToggleButton("v+")
-        bAddVertex.setId(FXMeshCanvas.Modes.ADDVERTEX.name())
+        bAddVertex.id = FXMeshCanvas.Modes.ADDVERTEX.name()
         val bRemoveVertex = ToggleButton("v-")
-        bRemoveVertex.setId(FXMeshCanvas.Modes.REMOVEVERTEX.name())
+        bRemoveVertex.id = FXMeshCanvas.Modes.REMOVEVERTEX.name()
         val bAddEdge = ToggleButton("e+")
-        bAddEdge.setId(FXMeshCanvas.Modes.ADDEDGE.name())
-        tbg.getToggles().addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
+        bAddEdge.id = FXMeshCanvas.Modes.ADDEDGE.name()
+        tbg.toggles.addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
         tbg.selectedToggleProperty().addListener { ov, told, tnew: Toggle? ->
-            val toggle = tbg.getSelectedToggle()
+            val toggle = tbg.selectedToggle
             if (toggle is ToggleButton) {
-                val m = FXMeshCanvas.Modes.valueOf(toggle.getId())
+                val m = FXMeshCanvas.Modes.valueOf(toggle.id)
                 if (canvas.mode.get() != m) canvas.mode.set(m)
             }
         }
         canvas.mode.addListener { ov, mold, mnew ->
-            val toggle = tbg.getSelectedToggle()
+            val toggle = tbg.selectedToggle
             if (toggle is ToggleButton) {
-                if (toggle.getId() != mnew.name()) {
-                    tbg.selectToggle(tbg.getToggles().first { it is ToggleButton && it.getId() == mnew.name() })
+                if (toggle.id != mnew.name()) {
+                    tbg.selectToggle(tbg.toggles.first { it is ToggleButton && it.id == mnew.name() })
                 }
             }
         }
-        tbg.selectToggle(tbg.getToggles().first())
-        tb.getItems().addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
-        tb.getItems().add(Separator(Orientation.VERTICAL))
+        tbg.selectToggle(tbg.toggles.first())
+        tb.items.addAll(bView, bAddVertex, bRemoveVertex, bAddEdge)
+        tb.items.add(Separator(Orientation.VERTICAL))
         val angles = ToggleButton("|a"); angles.selectedProperty().bindBidirectional(canvas.lblangles)
         val vertices = ToggleButton("|v"); vertices.selectedProperty().bindBidirectional(canvas.lblvertices)
         val lnone = ToggleButton("| ")
         val lg = ToggleGroup()
-        lg.getToggles().addAll(lnone, vertices, angles)
-        lg.selectToggle(lg.getToggles()[0])
-        tb.getItems().addAll(lnone, vertices, angles)
+        lg.toggles.addAll(lnone, vertices, angles)
+        lg.selectToggle(lg.toggles[0])
+        tb.items.addAll(lnone, vertices, angles)
     }
 }
 
-class MeshCanvasStatusline<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : HBox() {
+class MeshCanvasStatusline<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) : HBox() {
     init {
         val stx = TextField()
         stx.textProperty().bind(canvas.currentMouseTransformedX.asString("%.2f"))
-        stx.setEditable(false)
+        stx.isEditable = false
         val sty = TextField()
         sty.textProperty().bind(canvas.currentMouseTransformedY.asString("%.2f"))
-        sty.setEditable(false)
+        sty.isEditable = false
         val ctx = TextField()
         ctx.textProperty().bind(canvas.context.asString())
         val ctxNext = TextField()
         val ctxPrev = TextField()
         val ctxLeft = TextField()
         canvas.context.addListener { ov, oe, ne ->
-            ctxNext.setText("${ne.next}")
-            ctxPrev.setText("${ne.previous}")
-            ctxLeft.setText("${ne.left}")
+            ctxNext.text = "${ne.next}"
+            ctxPrev.text = "${ne.previous}"
+            ctxLeft.text = "${ne.left}"
         }
-        getChildren().addAll(Label("X:"), stx, Label("Y:"), sty, Label("e:"), ctx, Label("n:"), ctxNext, Label("p:"), ctxPrev, Label("f:"), ctxLeft)
+        children.addAll(Label("X:"), stx, Label("Y:"), sty, Label("e:"), ctx, Label("n:"), ctxNext, Label("p:"), ctxPrev, Label("f:"), ctxLeft)
 
     }
 }
 
-class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
+class MeshItemsAccordion<H:Any,V:Any,F:Any>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
     private val log = LoggerFactory.getLogger(this.javaClass)
     val vertexListView: VertexListView<H,V,F> = VertexListView(canvas)
     val edgeListView: EdgeListView<H,V,F> = EdgeListView(canvas)
@@ -117,15 +116,15 @@ class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
             scrollpane(faceListView)
             button("Monotonie") {
                 setOnAction {
-                    val f = faceListView.getSelectionModel().getSelectedItem()
+                    val f = faceListView.selectionModel.selectedItem
                     if(f!=null) {
-                        faceListView.getSelectionModel().clearSelection()
+                        faceListView.selectionModel.clearSelection()
                         val monos = MeshOperations(canvas.mesh).classifyMonotnie(f.edge)
                         canvas.painters.add {
                             save()
-                            setLineWidth(canvas.px)
-                            setStroke(Color.BLACK)
-                            setFill(Color.BLACK)
+                            lineWidth = canvas.px
+                            stroke = Color.BLACK
+                            fill = Color.BLACK
                             monos.forEach {
                                 log.d{"mono: ${it.value}"}
                                 when (it.value) {
@@ -164,35 +163,35 @@ class MeshItemsAccordion<H,V,F>(canvas:FXMeshCanvas<H,V,F>) : Accordion() {
         val tpf = TitledPane("Faces", fcont)
         val tph = TitledPane("Holes", contvb)
         val accordeon = this
-        accordeon.getPanes() add tpv
-        accordeon.getPanes() add tpe
-        accordeon.getPanes() add tpf
-        accordeon.getPanes() add tph
+        accordeon.panes add tpv
+        accordeon.panes add tpe
+        accordeon.panes add tpf
+        accordeon.panes add tph
         accordeon.expandedPaneProperty().addListener { ov, old, new:TitledPane? ->
             when(new) {
                 tpv -> {
-                    edgeListView.getSelectionModel().clearSelection()
-                    faceListView.getSelectionModel().clearSelection()
+                    edgeListView.selectionModel.clearSelection()
+                    faceListView.selectionModel.clearSelection()
                 }
                 tpe -> {
-                    vertexListView.getSelectionModel().clearSelection()
-                    faceListView.getSelectionModel().clearSelection()
+                    vertexListView.selectionModel.clearSelection()
+                    faceListView.selectionModel.clearSelection()
                 }
                 tpf -> {
-                    edgeListView.getSelectionModel().clearSelection()
-                    vertexListView.getSelectionModel().clearSelection()
+                    edgeListView.selectionModel.clearSelection()
+                    vertexListView.selectionModel.clearSelection()
                 }
                 tph -> {
-                    vertexListView.getSelectionModel().clearSelection()
-                    edgeListView.getSelectionModel().clearSelection()
-                    faceListView.getSelectionModel().clearSelection()
+                    vertexListView.selectionModel.clearSelection()
+                    edgeListView.selectionModel.clearSelection()
+                    faceListView.selectionModel.clearSelection()
                 }
             }
         }
     }
 }
 
-class MeshScene<H,V,F>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
+class MeshScene<H:Any,V:Any,F:Any>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
                        ke: KClass<H>, kf: KClass<F>,
                        width: Double, height: Double, fill: Paint = Color.WHITE,
                        depthBuffer: Boolean = false, antiAliasing: SceneAntialiasing = SceneAntialiasing.DISABLED) :
@@ -200,22 +199,22 @@ class MeshScene<H,V,F>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
     var inspector : Stage? = null
     init {
         setFill(fill)
-        val bp = getRoot() as BorderPane
+        val bp = root as BorderPane
         val canvas = FXMeshCanvas(mesh, minMeshWidth, kv, ke, kf)
         val slider = Slider(.2, 5.0, 1.0)
-        slider.setShowTickLabels(true)
-        slider.setShowTickMarks(true)
+        slider.isShowTickLabels = true
+        slider.isShowTickMarks = true
         slider.valueProperty().bindBidirectional(canvas.zoom)
-        bp.setLeft(VBox(MeshItemsAccordion(canvas), slider))
-        bp.setCenter(ScrollPane(canvas))
-        bp.setBottom(MeshCanvasStatusline(canvas))
+        bp.left = VBox(MeshItemsAccordion(canvas), slider)
+        bp.center = ScrollPane(canvas)
+        bp.bottom = MeshCanvasStatusline(canvas)
 
         val mb = menubar {
-            setUseSystemMenuBar(true)
+            isUseSystemMenuBar = true
             menu("View") {
                 item("Inspector") {
                     setOnAction {
-                        if(inspector!=null && !(inspector?.isShowing()?:true)) {
+                        if(inspector!=null && !(inspector?.isShowing ?:true)) {
                             inspector?.show()
                             inspector?.toFront()
                         }
@@ -227,7 +226,7 @@ class MeshScene<H,V,F>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
                             val stage = Stage()
                             inspector=stage
                             stage.initStyle(StageStyle.UTILITY)
-                            stage.setScene(scene)
+                            stage.scene = scene
                             stage.show()
                         }
                     }
@@ -241,21 +240,21 @@ class MeshScene<H,V,F>(mesh: Mesh<H, V, F>, minMeshWidth: Double, kv: KClass<V>,
             }
         }
 
-        bp.setTop(VBox(mb, MeshCanvasToolbar(canvas)))
+        bp.top = VBox(mb, MeshCanvasToolbar(canvas))
     }
 }
 
-class MeshContainerTreeView<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : TreeView<HalfEdge<H,V,F>>() {
+class MeshContainerTreeView<H:Any,V:Any,F:Any>(val canvas:FXMeshCanvas<H,V,F>) : TreeView<HalfEdge<H,V,F>>() {
     val log = LoggerFactory.getLogger(this.javaClass)
     init {
         val root = TreeItem(canvas.mesh.NOEDGE)
 
-        this.setRoot(root)
+        this.root = root
         this.showRootProperty().set(false)
         create()
-        getSelectionModel().selectedItemProperty().addListener { ov, oti, nti ->
-            if(nti!=null && nti.getValue() is HalfEdge<H,V,F>)
-                canvas.transientMarksE.addAll(nti.getValue()())
+        selectionModel.selectedItemProperty().addListener { ov, oti, nti ->
+            if(nti!=null && nti.value is HalfEdge<H,V,F>)
+                canvas.transientMarksE.addAll(nti.value)
         }
     }
 
@@ -266,7 +265,7 @@ class MeshContainerTreeView<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : TreeView<Ha
         containers.collect(root) {
             tn, e ->
             val ntn = TreeItem(e)
-            tn.getChildren() add ntn
+            tn.children add ntn
             ntn
         }
         setRoot(root)
@@ -276,7 +275,7 @@ class MeshContainerTreeView<H,V,F>(val canvas:FXMeshCanvas<H,V,F>) : TreeView<Ha
                 override fun updateItem(item: HalfEdge<H, V, F>?, empty: Boolean) {
                     super.updateItem(item, empty)
                     if (!empty && item != null) {
-                        setText("$item")
+                        text = "$item"
                         this.ttip = "p: ${containers.path(item)} lvl: ${containers.level(item)}"
                     }
                 }
